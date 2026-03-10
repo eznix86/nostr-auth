@@ -1,5 +1,8 @@
 # Nostr Auth
 
+![Demo GIF](./art/demo.gif)
+
+
 Authentication with Nostr.
 
 ## Requirements
@@ -43,3 +46,7 @@ Should be available on http://localhost:3000
 ## License
 
 [MIT](./LICENSE)
+
+## Credits
+
+- Photo by <a href="https://unsplash.com/@wilstewart3">Wil Stewart</a> on <a href="https://unsplash.com/photos/landscape-photography-of-brown-mountain-pHANr-CpbYM">Unsplash</a>
