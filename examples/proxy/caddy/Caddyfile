@@ -1,0 +1,8 @@
+:80 {
+  forward_auth host.docker.internal:3000 {
+    uri /auth/check
+    copy_headers Remote-User X-Forwarded-User X-Auth-Request-User X-Auth-Request-Email X-Auth-Request-Preferred-Username X-Auth-Request-Name X-Auth-Request-Picture
+  }
+
+  reverse_proxy host.docker.internal:8080
+}

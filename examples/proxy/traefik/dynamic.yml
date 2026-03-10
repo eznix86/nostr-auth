@@ -1,0 +1,29 @@
+http:
+  routers:
+    upstream:
+      rule: PathPrefix(`/`)
+      entryPoints:
+        - web
+      middlewares:
+        - nostr-auth
+      service: upstream
+
+  middlewares:
+    nostr-auth:
+      forwardAuth:
+        address: http://host.docker.internal:3000/auth/check
+        trustForwardHeader: true
+        authResponseHeaders:
+          - Remote-User
+          - X-Forwarded-User
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Preferred-Username
+          - X-Auth-Request-Name
+          - X-Auth-Request-Picture
+
+  services:
+    upstream:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8080

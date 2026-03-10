@@ -1,0 +1,6 @@
+tmp
+node_modules
+public/build
+!public/build/.gitkeep
+bootstrap
+auth.json

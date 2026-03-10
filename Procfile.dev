@@ -1,0 +1,2 @@
+web: sleep 3 && air
+vite: bun run dev

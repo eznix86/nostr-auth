@@ -1,0 +1,3 @@
+web: bun run build && go build -o ./tmp/main ./cmd/web && ./tmp/main
+upstream: go run ./cmd/upstream
+proxy: docker compose -f examples/proxy/docker-compose.yml up

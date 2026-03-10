@@ -1,0 +1,3 @@
+web: sleep 3 && air
+vite: bun run dev
+ssr_build: bun run ssr:watch

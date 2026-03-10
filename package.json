@@ -1,0 +1,30 @@
+{
+  "name": "nostr-auth",
+  "private": true,
+  "type": "module",
+  "scripts": {
+	"dev": "vite",
+	"build": "vite build",
+	"ssr:build": "vite build --ssr resources/js/app.jsx --outDir bootstrap/ssr",
+	"ssr:watch": "vite build --ssr resources/js/app.jsx --outDir bootstrap/ssr --watch",
+	"ssr:start": "node bootstrap/ssr/app.js"
+  },
+  "dependencies": {
+    "@inertiajs/react": "^3.0.0-beta.0",
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@inertiajs/vite": "^3.0.0-beta.2",
+    "@tailwindcss/vite": "^4.2.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "laravel-vite-plugin": "^2.0.1",
+    "tailwindcss": "^4.2.1",
+    "vite": "^7.1.7"
+  }
+}

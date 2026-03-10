@@ -1,0 +1,71 @@
+version: "3"
+tasks:
+  web:install:
+    cmds:
+      - bun install
+  web:build:
+    cmds:
+      - bun run build
+  web:build:ssr:
+    cmds:
+      - bun run ssr:build
+  web:dev:
+    cmds:
+      - bun run dev
+  web:dev:ssr:
+    cmds:
+      - bun run ssr:watch
+  web:ssr:
+    cmds:
+      - bun run ssr:start
+
+  go:dev:
+    cmds:
+      - air
+
+  demo:
+    cmds:
+      - overmind start -f Procfile.demo
+
+  demo:upstream:
+    cmds:
+      - go run ./cmd/upstream
+  run:
+    cmds:
+      - bun run build
+      - go build -o ./tmp/main ./cmd/web
+      - ls -lah ./tmp/main
+      - ./tmp/main
+
+  run:ssr:
+    deps: [web:build:ssr, build]
+    cmd: "Running SSR..."
+
+  dev:
+    cmds:
+      - overmind start -f Procfile.dev
+  dev:ssr:
+    cmds:
+      - overmind start -f Procfile.dev.ssr
+
+  fix:
+    deps:
+      - lint
+      - vet
+      - fmt
+
+  lint:
+    cmds:
+      - golangci-lint run
+  test:
+    cmds:
+      - go test ./...
+  vet:
+    cmds:
+      - go vet ./...
+  fmt:
+    cmds:
+      - go fmt ./...
+  tidy:
+    cmds:
+      - go mod tidy
