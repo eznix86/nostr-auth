@@ -2,8 +2,20 @@
 
 ![Demo GIF](./art/demo.gif)
 
+Nostr Auth lets you keep your identity while providing a simple way to manage access to your platforms. It makes your identity portable across web applications, so you can use Nostr-based authentication with existing services — without introducing unnecessary complexity.
 
-Authentication with Nostr.
+## Why Nostr Auth?
+
+Existing authentication solutions are powerful and widely adopted in the web2 world, but they are not always a natural fit for Nostr-based users. Nostr Auth sits in front of your existing web applications and adds a Nostr-based authentication layer, so you can protect resources while preserving your users' portable identity.
+
+## Use Cases
+
+- Adding Nostr authentication to existing web applications
+- Protecting internal or private resources
+- Enabling identity-based access control for Nostr users
+
+> [!NOTE]
+> This version only supports cookie-based authentication, meaning it works within a single primary domain and its subdomains (e.g. `example.com` and `app.example.com`). Cross-domain authentication is not currently supported (`anotherdomain.com`).
 
 ## Requirements
 
@@ -15,7 +27,7 @@ Authentication with Nostr.
 - [bun](https://bun.sh/)
 - Docker and Docker Compose (to try demo)
 
-## Running locally
+## Running Locally
 
 - Fork
 - `bun install`
@@ -28,11 +40,11 @@ Authentication with Nostr.
 
 Should be available on http://localhost:3000
 
-## Testing demo
+## Testing Demo
 
 - `bun install`
 - `go install`
-- `task demo` Check out the examples [README.md](./examples/proxy/README.md)
+- `task demo` — check out the examples [README.md](./examples/proxy/README.md)
 
 ## Supports
 
