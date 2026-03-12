@@ -13,10 +13,12 @@ import (
 	"time"
 
 	nostrlib "fiatjaf.com/nostr"
+	"github.com/eznix86/nostr-auth/internal/account"
 	"github.com/eznix86/nostr-auth/internal/app"
 	"github.com/eznix86/nostr-auth/internal/challenge"
 	"github.com/eznix86/nostr-auth/internal/config"
 	"github.com/eznix86/nostr-auth/internal/csrf"
+	"github.com/eznix86/nostr-auth/internal/nostr"
 	serverpkg "github.com/eznix86/nostr-auth/internal/server"
 	"github.com/eznix86/nostr-auth/internal/session"
 )
@@ -296,14 +298,21 @@ func TestForwardAuthForbiddenWhenAuthorizerRejectsUser(t *testing.T) {
 	allowedKey := nostrlib.Generate()
 	rejectedKey := nostrlib.Generate()
 
-	configPath := filepath.Join(t.TempDir(), "auth.json")
+	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(configPath, []byte(`{
-		"auth": {"enabled": true},
-		"groups": {"admins": ["`+allowedKey.Public().Hex()+`"]},
-		"apps": {
-			"default": {
-				"config": {"domain": "demo.local"},
-				"users": ["group:admins"]
+		"auth": {
+			"enabled": true,
+			"groups": {"admins": ["`+allowedKey.Public().Hex()+`"]},
+			"apps": {
+				"default": {
+					"config": {"domain": "demo.local"},
+					"users": ["group:admins"]
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "canyon-falls"}
 			}
 		}
 	}`), 0o600); err != nil {
@@ -311,11 +320,11 @@ func TestForwardAuthForbiddenWhenAuthorizerRejectsUser(t *testing.T) {
 	}
 
 	app := newTestAppWithConfig(t, config.Config{
-		AppURL:         "http://localhost:3000",
-		ChallengeTTL:   5 * time.Minute,
-		AppSecret:      "test-secret",
-		SessionTTL:     24 * time.Hour,
-		AuthConfigFile: configPath,
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   configPath,
 	})
 
 	recorder := httptest.NewRecorder()
@@ -330,13 +339,13 @@ func TestForwardAuthForbiddenWhenAuthorizerRejectsUser(t *testing.T) {
 	}
 }
 
-func TestForwardAuthForbiddenWhenAuthConfigIsMissing(t *testing.T) {
+func TestForwardAuthForbiddenWhenConfigFileIsMissing(t *testing.T) {
 	app := newTestAppWithConfig(t, config.Config{
-		AppURL:         "http://localhost:3000",
-		ChallengeTTL:   5 * time.Minute,
-		AppSecret:      "test-secret",
-		SessionTTL:     24 * time.Hour,
-		AuthConfigFile: filepath.Join(t.TempDir(), "missing.json"),
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   filepath.Join(t.TempDir(), "missing.json"),
 	})
 
 	recorder := httptest.NewRecorder()
@@ -351,13 +360,68 @@ func TestForwardAuthForbiddenWhenAuthConfigIsMissing(t *testing.T) {
 	}
 }
 
-func TestNewAppIgnoresMissingAuthConfigFile(t *testing.T) {
+func TestForwardAuthSetsGroupHeaders(t *testing.T) {
+	allowedKey := nostrlib.Generate()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"auth": {
+			"enabled": true,
+			"groups": {
+				"admins": ["`+allowedKey.Public().Hex()+`", "group:staff"],
+				"staff": ["alice@example.com"]
+			},
+			"apps": {
+				"default": {
+					"config": {"domain": "demo.local"},
+					"users": ["group:admins"]
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "fields-road"}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
 	app := newTestAppWithConfig(t, config.Config{
-		AppURL:         "http://localhost:3000",
-		ChallengeTTL:   5 * time.Minute,
-		AppSecret:      "test-secret",
-		SessionTTL:     24 * time.Hour,
-		AuthConfigFile: filepath.Join(t.TempDir(), "missing.json"),
+		AppURL:              "http://localhost:3000",
+		ChallengeTTL:        5 * time.Minute,
+		AppSecret:           "test-secret",
+		SessionTTL:          24 * time.Hour,
+		ConfigFile:          configPath,
+		ProfileFetchTimeout: time.Second,
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/check", nil)
+	req.Header.Set("X-Forwarded-Host", "demo.local")
+	req.AddCookie(authCookie(t, app, allowedKey.Public().Hex()))
+	req.AddCookie(profileCookie(t, app, "alice@example.com"))
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("X-Forwarded-Groups"); got != "admins,staff" {
+		t.Fatalf("X-Forwarded-Groups = %q, want %q", got, "admins,staff")
+	}
+	if got := recorder.Header().Get("X-Auth-Request-Groups"); got != "admins,staff" {
+		t.Fatalf("X-Auth-Request-Groups = %q, want %q", got, "admins,staff")
+	}
+}
+
+func TestNewAppIgnoresMissingConfigFile(t *testing.T) {
+	app := newTestAppWithConfig(t, config.Config{
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   filepath.Join(t.TempDir(), "missing.json"),
 	})
 
 	if app == nil {
@@ -402,5 +466,21 @@ func authCookie(t *testing.T, app *serverpkg.App, pubkey string) *http.Cookie {
 	}
 
 	t.Fatal("expected auth session cookie")
+	return nil
+}
+
+func profileCookie(t *testing.T, app *serverpkg.App, nip05 string) *http.Cookie {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	app.Handlers.Account.Set(recorder, &nostr.Profile{NIP05: nip05})
+
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == account.ProfileCookieName {
+			return cookie
+		}
+	}
+
+	t.Fatal("expected profile cookie")
 	return nil
 }
