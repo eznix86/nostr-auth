@@ -188,7 +188,22 @@ jobs:
           docker buildx imagetools inspect "${IMAGE}:${VERSION_TAG}"
 
       - name: Wait for registry tags to settle
-        run: sleep 30
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image }}
+          VERSION_TAG: ${{ needs.prepare.outputs.version }}
+        run: |
+          delay=1
+          for attempt in $(seq 1 6); do
+            if docker buildx imagetools inspect "${IMAGE}:${VERSION_TAG}" >/dev/null 2>&1; then
+              exit 0
+            fi
+
+            sleep "$delay"
+            delay=$((delay * 2))
+          done
+
+          echo "Timed out waiting for ${IMAGE}:${VERSION_TAG}" >&2
+          exit 1
 
       - name: Delete untagged container versions
         uses: actions/delete-package-versions@v5
