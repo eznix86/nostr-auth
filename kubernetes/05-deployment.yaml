@@ -30,7 +30,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: nostr-auth
-          image: registry.brunobernard.dev/nostr-auth:0.2.0
+          image: ghcr.io/eznix86/nostr-auth:0.2.0
           imagePullPolicy: Always
           ports:
             - name: http

@@ -186,3 +186,14 @@ jobs:
           VERSION_TAG: ${{ needs.prepare.outputs.version }}
         run: |
           docker buildx imagetools inspect "${IMAGE}:${VERSION_TAG}"
+
+      - name: Wait for registry tags to settle
+        run: sleep 30
+
+      - name: Delete untagged container versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ needs.prepare.outputs.image }}
+          package-type: container
+          delete-only-untagged-versions: true
+          min-versions-to-keep: 1
