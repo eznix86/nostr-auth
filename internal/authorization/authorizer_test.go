@@ -57,6 +57,33 @@ func TestAuthorizerAllowsPubKeyAndNIP05(t *testing.T) {
 	}
 }
 
+func TestAuthorizerGroupsReturnsMatchedGroups(t *testing.T) {
+	secretKey := nostrlib.Generate()
+	pubkey := secretKey.Public()
+
+	authorizer, err := Compile(FileConfig{
+		Auth: AuthSettings{Enabled: true},
+		Groups: map[string][]string{
+			"admins": {nip19.EncodeNpub(pubkey), "group:staff"},
+			"staff":  {"alice@example.com"},
+		},
+		Apps: map[string]AppConfig{
+			"default": {
+				Config: AppMatchConfig{Domain: "localhost"},
+				Users:  []string{"group:admins"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	groups := authorizer.Groups("localhost", pubkey.Hex(), "alice@example.com")
+	if len(groups) != 2 || groups[0] != "admins" || groups[1] != "staff" {
+		t.Fatalf("Groups() = %v, want [admins staff]", groups)
+	}
+}
+
 func TestCompileRejectsUnknownGroup(t *testing.T) {
 	_, err := Compile(FileConfig{
 		Auth: AuthSettings{Enabled: true},

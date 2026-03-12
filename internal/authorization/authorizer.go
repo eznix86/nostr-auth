@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sort"
 	"strings"
 
 	appauth "github.com/eznix86/nostr-auth/internal/auth"
@@ -41,6 +42,7 @@ type CompiledApp struct {
 	Domains map[string]struct{}
 	PubKeys map[string]struct{}
 	NIP05s  map[string]struct{}
+	Groups  map[string]principalSet
 }
 
 type principalSet struct {
@@ -113,6 +115,35 @@ func (a *Authorizer) Allowed(host, pubkey, nip05 string) bool {
 	return ok
 }
 
+func (a *Authorizer) Groups(host, pubkey, nip05 string) []string {
+	if a == nil {
+		return nil
+	}
+
+	app, ok := a.appForHost(host)
+	if !ok {
+		return nil
+	}
+
+	normalizedPubkey := strings.ToLower(pubkey)
+	normalizedNIP05 := normalizeNIP05(nip05)
+	matched := make([]string, 0, len(app.Groups))
+	for groupName, principals := range app.Groups {
+		if _, ok := principals.PubKeys[normalizedPubkey]; ok {
+			matched = append(matched, groupName)
+			continue
+		}
+		if normalizedNIP05 != "" {
+			if _, ok := principals.NIP05s[normalizedNIP05]; ok {
+				matched = append(matched, groupName)
+			}
+		}
+	}
+
+	sort.Strings(matched)
+	return matched
+}
+
 func (a *Authorizer) appForHost(host string) (CompiledApp, bool) {
 	normalizedHost := normalizeDomain(host)
 	if app, ok := a.apps[normalizedHost]; ok {
@@ -140,7 +171,48 @@ func compileApp(appName string, appCfg AppConfig, groups map[string][]string) (C
 		Domains: domains,
 		PubKeys: principals.PubKeys,
 		NIP05s:  principals.NIP05s,
+		Groups:  compileAppGroups(appCfg.Users, groups),
 	}, nil
+}
+
+func compileAppGroups(entries []string, groups map[string][]string) map[string]principalSet {
+	compiled := make(map[string]principalSet)
+	seen := make(map[string]bool)
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if !strings.HasPrefix(entry, groupPrefix) {
+			continue
+		}
+
+		groupName := strings.TrimPrefix(entry, groupPrefix)
+		collectCompiledGroups(groupName, groups, compiled, seen)
+	}
+
+	return compiled
+}
+
+func collectCompiledGroups(groupName string, groups map[string][]string, compiled map[string]principalSet, seen map[string]bool) {
+	if seen[groupName] {
+		return
+	}
+	seen[groupName] = true
+
+	members, ok := groups[groupName]
+	if !ok {
+		return
+	}
+
+	principals, err := expandPrincipals(members, groups, nil)
+	if err == nil {
+		compiled[groupName] = principals
+	}
+
+	for _, member := range members {
+		member = strings.TrimSpace(member)
+		if strings.HasPrefix(member, groupPrefix) {
+			collectCompiledGroups(strings.TrimPrefix(member, groupPrefix), groups, compiled, seen)
+		}
+	}
 }
 
 func compileDomains(cfg AppMatchConfig) map[string]struct{} {

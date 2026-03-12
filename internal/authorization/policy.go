@@ -20,3 +20,11 @@ func (p *Policy) Allowed(host, pubkey, nip05 string) bool {
 
 	return p.authorizer.Allowed(host, pubkey, nip05)
 }
+
+func (p *Policy) Groups(host, pubkey, nip05 string) []string {
+	if p == nil || p.authorizer == nil {
+		return nil
+	}
+
+	return p.authorizer.Groups(host, pubkey, nip05)
+}
