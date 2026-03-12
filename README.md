@@ -32,13 +32,58 @@ Existing authentication solutions are powerful and widely adopted in the web2 wo
 - Fork
 - `bun install`
 - `go install`
-- `cp auth.json.example auth.json`
-- Edit the `auth.json`
+- `cp config.json.example config.json`
+- Edit the `config.json`
 - `cp .env.example .env`
 - Edit the `.env`
 - `task dev`
 
 Should be available on http://localhost:3000
+
+## Config
+
+`config.json` controls both access rules and branding.
+
+```json
+{
+  "auth": {
+    "enabled": true,
+    "groups": {
+      "admins": [
+        "alice@example.com",
+        "npub1..."
+      ]
+    },
+    "apps": {
+      "default": {
+        "config": {
+          "domains": [
+            "app.example.com"
+          ]
+        },
+        "users": [
+          "group:admins"
+        ]
+      }
+    }
+  },
+  "branding": {
+    "background": {
+      "source": {
+        "type": "preset",
+        "variant": "fields-road"
+      }
+    }
+  }
+}
+```
+
+- `auth.enabled` turns authorization on or off
+- `auth.groups` defines reusable user groups with NIP-05 identifiers, `npub`, or nested `group:<name>` references
+- `auth.apps` defines which domains are protected and which users or groups can access them
+- `branding.background.source.type` currently supports `preset`
+- `branding.background.source.variant` can be `canyon-falls` (default), `fields-road`, `mountain-valley`, or `storm-valley`
+- if `branding` is omitted, the app falls back to `canyon-falls`
 
 ## Testing Demo
 
@@ -62,3 +107,5 @@ Should be available on http://localhost:3000
 ## Credits
 
 - Photo by <a href="https://unsplash.com/@wilstewart3">Wil Stewart</a> on <a href="https://unsplash.com/photos/landscape-photography-of-brown-mountain-pHANr-CpbYM">Unsplash</a>
+
+- Photo by <a href="https://sandeep.ramgolam.com/">Sandeep Ramgolam</a> on <a href="https://sandeep.ramgolam.com/wallpapers">Wallpapers</a>

@@ -1,0 +1,31 @@
+{
+  "auth": {
+    "enabled": false,
+    "groups": {
+      "admins": [
+        "eznix@nostrplebs.com",
+        "npub18us53gzgcc3p8mfmj7nf9kl5ugdkt0d0f9x97uxhc5pn96u2wnass2f0aj"
+      ]
+    },
+    "apps": {
+      "default": {
+        "config": {
+          "domains": [
+            "localhost:8081"
+          ]
+        },
+        "users": [
+          "group:admins"
+        ]
+      }
+    }
+  },
+  "branding": {
+    "background": {
+      "source": {
+        "type": "preset",
+        "variant": "fields-road"
+      }
+    }
+  }
+}

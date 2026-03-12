@@ -84,32 +84,3 @@
         @apply m-0 bg-background font-sans text-foreground;
     }
 }
-
-@layer components {
-    .auth-bg-image {
-        background-image:
-            linear-gradient(
-                to bottom,
-                rgba(255, 255, 255, 0.02),
-                rgba(7, 10, 8, 0.08)
-            ),
-            url("/resources/images/background.jpg");
-        inset: -2rem;
-        mask-image: linear-gradient(
-            to bottom,
-            rgba(0, 0, 0, 0.98) 0%,
-            rgba(0, 0, 0, 0.95) 48%,
-            rgba(0, 0, 0, 0.82) 74%,
-            rgba(0, 0, 0, 0.5) 92%,
-            transparent 100%
-        );
-        -webkit-mask-image: linear-gradient(
-            to bottom,
-            rgba(0, 0, 0, 0.98) 0%,
-            rgba(0, 0, 0, 0.95) 48%,
-            rgba(0, 0, 0, 0.82) 74%,
-            rgba(0, 0, 0, 0.5) 92%,
-            transparent 100%
-        );
-    }
-}

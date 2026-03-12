@@ -41,6 +41,14 @@ func (a *App) Render(w http.ResponseWriter, r *http.Request, component string, p
 	return a.vite.Render(w, r, component, props)
 }
 
+func (a *App) ShareProp(key string, val any) {
+	a.vite.ShareProp(key, val)
+}
+
+func (a *App) ShareTemplateData(key string, val any) {
+	a.vite.ShareTemplateData(key, val)
+}
+
 func (a *App) Redirect(w http.ResponseWriter, r *http.Request, location string, status int) {
 	a.vite.Location(w, r, location, status)
 }

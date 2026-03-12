@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/eznix86/nostr-auth/internal/account"
+	"github.com/eznix86/nostr-auth/internal/appconfig"
 	"github.com/eznix86/nostr-auth/internal/authorization"
 	"github.com/eznix86/nostr-auth/internal/challenge"
 	"github.com/eznix86/nostr-auth/internal/config"
@@ -20,15 +21,23 @@ func New(cfg config.Config) (*server.App, error) {
 }
 
 func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
+	appConfig, err := appconfig.LoadFile(cfg.ConfigFile)
+	if err != nil {
+		return nil, err
+	}
+
 	inertiaApp, err := inertia.New(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	policy, err := authorization.LoadPolicyFile(cfg.AuthConfigFile)
+	policy, err := authorization.CompilePolicy(appConfig.Auth.PolicyConfig())
 	if err != nil {
 		return nil, err
 	}
+
+	inertiaApp.ShareProp("branding", appConfig.Branding)
+	inertiaApp.ShareTemplateData("backgroundAsset", appConfig.Branding.BackgroundAsset())
 
 	jar := cookie.NewJar(cfg.CookieDomain, cfg.CookieSecure)
 	h := &server.Context{
