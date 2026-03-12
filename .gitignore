@@ -4,5 +4,7 @@ public/build
 !public/build/.gitkeep
 public/hot
 bootstrap
+.env
 config.json
 kubernetes/06-secret.yaml
+.DS_Store

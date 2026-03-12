@@ -1,2 +1,2 @@
-web: sleep 3 && air
+web: sleep 1 && air
 vite: bun run dev
