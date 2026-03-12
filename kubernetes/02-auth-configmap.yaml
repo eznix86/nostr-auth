@@ -36,7 +36,7 @@ data:
         "background": {
           "source": {
             "type": "preset",
-            "variant": "storm-valley"
+            "variant": "canyon-falls"
           }
         }
       }

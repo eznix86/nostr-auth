@@ -85,6 +85,20 @@ func TestForwardAuthIngressSubrequestReturnsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestHealthzReturnsServiceUnavailableWhenDraining(t *testing.T) {
+	app := newTestApp(t)
+	app.SetReady(false)
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestCSRFEndpointReturnsToken(t *testing.T) {
 	app := newTestApp(t)
 	recorder := httptest.NewRecorder()

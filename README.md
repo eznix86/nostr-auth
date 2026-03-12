@@ -71,7 +71,7 @@ Should be available on http://localhost:3000
     "background": {
       "source": {
         "type": "preset",
-        "variant": "fields-road"
+        "variant": "canyon-falls"
       }
     }
   }

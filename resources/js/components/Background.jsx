@@ -1,20 +1,14 @@
-import canyonFalls from "../../images/canyon-falls.jpg";
-import fieldsRoad from "../../images/fields-road.jpg";
-import mountainValley from "../../images/mountain-valley.jpg";
-import stormValley from "../../images/storm-valley.jpg";
+import images from "../../images/images.json";
 
-const DEFAULT_VARIANT = "canyon-falls";
-
-const BACKGROUND_VARIANTS = {
-  "canyon-falls": canyonFalls,
-  "fields-road": fieldsRoad,
-  "mountain-valley": mountainValley,
-  "storm-valley": stormValley,
-};
+const BACKGROUND_VARIANTS = import.meta.glob("../../images/*.webp", {
+  eager: true,
+  import: "default",
+});
 
 export default function Background({ branding }) {
-  const variant = branding?.background?.source?.type === "preset" ? branding.background.source.variant : DEFAULT_VARIANT;
-  const backgroundUrl = BACKGROUND_VARIANTS[variant] || BACKGROUND_VARIANTS[DEFAULT_VARIANT];
+  const defaultVariant = images.default || "canyon-falls";
+  const variant = branding?.background?.source?.type === "preset" ? branding.background.source.variant : defaultVariant;
+  const backgroundUrl = resolveBackgroundUrl(variant) || resolveBackgroundUrl(defaultVariant);
 
   return (
     <div
@@ -27,4 +21,13 @@ export default function Background({ branding }) {
       }}
     />
   );
+}
+
+function resolveBackgroundUrl(variant) {
+  const file = images.variants?.[variant]?.file;
+  if (!file) {
+    return null;
+  }
+
+  return BACKGROUND_VARIANTS[`../../images/${file}`] || null;
 }

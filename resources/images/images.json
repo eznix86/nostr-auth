@@ -1,0 +1,17 @@
+{
+  "default": "canyon-falls",
+  "variants": {
+    "canyon-falls": {
+      "file": "canyon-falls.webp"
+    },
+    "fields-road": {
+      "file": "fields-road.webp"
+    },
+    "mountain-valley": {
+      "file": "mountain-valley.webp"
+    },
+    "storm-valley": {
+      "file": "storm-valley.webp"
+    }
+  }
+}

@@ -19,6 +19,7 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY assets.go ./
 COPY cmd ./cmd
 COPY internal ./internal
+COPY resources/images/images.json ./resources/images/images.json
 COPY resources/views ./resources/views
 COPY public ./public
 COPY --from=web-build /app/public/build ./public/build
@@ -29,7 +30,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags='-s -w' -o /out/nostr-auth ./cmd/web
 
-FROM gcr.io/distroless/base-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
 COPY --from=go-build /out/nostr-auth /app/nostr-auth
 EXPOSE 3000

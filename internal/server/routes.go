@@ -7,7 +7,6 @@ import (
 
 	assets "github.com/eznix86/nostr-auth"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 func NewRouter(app *App) (chi.Router, error) {
@@ -22,9 +21,14 @@ func NewRouter(app *App) (chi.Router, error) {
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Heartbeat("/healthz"))
 	r.Use(app.Handlers.WithAuthenticatedPubkey)
 	r.Get("/healthz", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !app.IsReady() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("draining"))
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}))

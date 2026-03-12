@@ -30,7 +30,7 @@ tasks:
 
   image:build:
     desc: Build and push the multi-arch Docker image
-    deps: [image:builder]
+    deps: [image:builder, images:webp]
     cmd: docker buildx build --builder {{.BUILDER_NAME}} --platform linux/amd64,linux/arm64 -t {{.FULL_IMAGE}} --push .
 
   kubernetes:check-secret:
@@ -77,19 +77,29 @@ tasks:
       - kubectl get pods -n nostr-auth
       - kubectl get svc -n nostr-auth
       - kubectl get ingress -n nostr-auth
+
+  images:webp:
+    desc: Move source images to originals, convert to WebP, and generate image manifest
+    cmds:
+      - python3 scripts/webp.py
+
   web:install:
     cmds:
       - bun install
   web:build:
+    deps: [images:webp]
     cmds:
       - bun run build
   web:build:ssr:
+    deps: [images:webp]
     cmds:
       - bun run ssr:build
   web:dev:
+    deps: [images:webp]
     cmds:
       - bun run dev
   web:dev:ssr:
+    deps: [images:webp]
     cmds:
       - bun run ssr:watch
   web:ssr:
@@ -109,7 +119,7 @@ tasks:
       - go run ./cmd/upstream
   run:
     cmds:
-      - bun run build
+      - task: web:build
       - go build -o ./tmp/main ./cmd/web
       - ls -lah ./tmp/main
       - ./tmp/main
