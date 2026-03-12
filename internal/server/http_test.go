@@ -66,6 +66,78 @@ func TestForwardAuthRedirectsBrowser(t *testing.T) {
 	}
 }
 
+func TestForwardAuthIngressSubrequestReturnsUnauthorized(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/check", nil)
+	req.Header.Set("Accept", "text/html")
+	req.Header.Set("X-Original-Method", http.MethodGet)
+	req.Header.Set("X-Original-URI", "/")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "demo.local")
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestCSRFEndpointReturnsToken(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/csrf", nil)
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+
+	var payload map[string]string
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if payload["token"] == "" {
+		t.Fatal("expected csrf token in payload")
+	}
+
+	setCookieHeader := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
+	if !strings.Contains(setCookieHeader, csrf.CookieName+"=") {
+		t.Fatal("expected csrf cookie to be set")
+	}
+}
+
+func TestChallengeEndpointReturnsToken(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/challenge", nil)
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+
+	var payload map[string]string
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if payload["token"] == "" {
+		t.Fatal("expected challenge token in payload")
+	}
+	if payload["relay"] == "" {
+		t.Fatal("expected relay in payload")
+	}
+
+	setCookieHeader := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
+	if !strings.Contains(setCookieHeader, challenge.SessionCookieName+"=") {
+		t.Fatal("expected challenge session cookie to be set")
+	}
+}
+
 func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	secretKey := nostrlib.Generate()
 	app := newTestApp(t)
@@ -134,6 +206,38 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	verifyReq.AddCookie(sessionCookie)
 	if got := app.Handlers.AuthenticatedPubkey(verifyReq); got != secretKey.Public().Hex() {
 		t.Fatalf("authenticated pubkey = %q, want %q", got, secretKey.Public().Hex())
+	}
+}
+
+func TestHomeRedirectsAuthenticatedUsersToLogoutPage(t *testing.T) {
+	secretKey := nostrlib.Generate()
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(authCookie(t, app, secretKey.Public().Hex()))
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("Location"); got != "/logout" {
+		t.Fatalf("Location = %q, want %q", got, "/logout")
+	}
+}
+
+func TestLogoutPageRedirectsGuestsHome(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("Location"); got != "/" {
+		t.Fatalf("Location = %q, want %q", got, "/")
 	}
 }
 

@@ -11,6 +11,37 @@ import (
 
 type Auth struct{ H *Context }
 
+func (a *Auth) CSRF(w http.ResponseWriter, r *http.Request) {
+	token, err := a.H.CSRF.Ensure(w, r)
+	if err != nil {
+		a.H.Fail(w, err, "failed to issue csrf token")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func (a *Auth) Challenge(w http.ResponseWriter, r *http.Request) {
+	sessionID, err := a.H.EnsureChallengeSession(w, r)
+	if err != nil {
+		a.H.Fail(w, err, "failed to issue challenge session")
+		return
+	}
+
+	challenge, err := a.H.CurrentOrIssueChallenge(sessionID)
+	if err != nil {
+		a.H.Fail(w, err, "failed to generate challenge")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"token": challenge.Token,
+		"relay": r.Host,
+	})
+}
+
 func (a *Auth) Verify(w http.ResponseWriter, r *http.Request) {
 	ctx, ok := ChallengeFromContext(r)
 	if !ok {

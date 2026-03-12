@@ -36,6 +36,9 @@ func NewRouter(app *App) (chi.Router, error) {
 	r.Group(func(r chi.Router) {
 		r.Use(app.Handlers.Inertia.Middleware)
 		r.Get("/", app.Home.Index)
+		r.Get("/auth/csrf", app.Auth.CSRF)
+		r.Get("/auth/challenge", app.Auth.Challenge)
+		r.Get("/logout", app.Logout.Index)
 		r.Group(func(r chi.Router) {
 			r.Use(app.Handlers.RequireCSRF)
 			r.With(app.Handlers.WithChallenge).Post("/auth/verify", app.Auth.Verify)

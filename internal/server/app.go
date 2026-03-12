@@ -6,6 +6,7 @@ type App struct {
 	Handlers *Context
 	Auth     *Auth
 	Home     *Home
+	Logout   *LogoutPage
 	Proxy    *Proxy
 	router   chi.Router
 }

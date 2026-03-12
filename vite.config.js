@@ -16,4 +16,9 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  server: {
+      cors: {
+          origin: '*',
+      },
+  },
 });

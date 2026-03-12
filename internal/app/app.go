@@ -49,6 +49,7 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 		Handlers: h,
 		Auth:     &server.Auth{H: h},
 		Home:     &server.Home{H: h},
+		Logout:   &server.LogoutPage{H: h},
 		Proxy:    &server.Proxy{H: h},
 	}
 
