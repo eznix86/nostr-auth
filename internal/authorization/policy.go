@@ -4,13 +4,22 @@ type Policy struct {
 	authorizer *Authorizer
 }
 
-func LoadPolicyFile(path string) (*Policy, error) {
-	authorizer, err := LoadFile(path)
+func CompilePolicy(cfg FileConfig) (*Policy, error) {
+	authorizer, err := Compile(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Policy{authorizer: authorizer}, nil
+}
+
+func LoadPolicyFile(path string) (*Policy, error) {
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return CompilePolicy(cfg)
 }
 
 func (p *Policy) Allowed(host, pubkey, nip05 string) bool {

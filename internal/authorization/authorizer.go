@@ -51,25 +51,34 @@ type principalSet struct {
 }
 
 func LoadFile(path string) (*Authorizer, error) {
+	cfg, err := LoadFileConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
+	return Compile(cfg)
+}
+
+func LoadFileConfig(path string) (FileConfig, error) {
 	if path == "" {
-		return nil, nil
+		return FileConfig{}, nil
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return FileConfig{}, nil
 		}
 
-		return nil, err
+		return FileConfig{}, err
 	}
 
 	var cfg FileConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+		return FileConfig{}, err
 	}
 
-	return Compile(cfg)
+	return cfg, nil
 }
 
 func Compile(cfg FileConfig) (*Authorizer, error) {

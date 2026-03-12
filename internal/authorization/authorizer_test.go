@@ -98,3 +98,11 @@ func TestCompileRejectsUnknownGroup(t *testing.T) {
 		t.Fatal("Compile() should reject unknown groups")
 	}
 }
+
+func TestPolicyRejectsWhenAuthorizerMissing(t *testing.T) {
+	policy := &Policy{}
+
+	if policy.Allowed("localhost:8081", "any-pubkey", "") {
+		t.Fatal("Allowed() should return false when auth is disabled")
+	}
+}
