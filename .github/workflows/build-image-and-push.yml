@@ -193,7 +193,9 @@ jobs:
       - name: Delete untagged container versions
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ${{ needs.prepare.outputs.image }}
+          owner: ${{ github.repository_owner }}
+          package-name: ${{ github.event.repository.name }}
           package-type: container
           delete-only-untagged-versions: true
           min-versions-to-keep: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
