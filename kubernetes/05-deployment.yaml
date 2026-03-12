@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nostr-auth
+  namespace: nostr-auth
+  labels:
+    app.kubernetes.io/name: nostr-auth
+    app.kubernetes.io/part-of: nostr-auth
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nostr-auth
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nostr-auth
+        app.kubernetes.io/part-of: nostr-auth
+    spec:
+      serviceAccountName: nostr-auth
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nostr-auth
+          image: registry.brunobernard.dev/nostr-auth:0.1.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: nostr-auth-env
+            - secretRef:
+                name: nostr-auth-secrets
+          volumeMounts:
+            - name: auth-policy
+              mountPath: /app/config.json
+              subPath: config.json
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: auth-policy
+          configMap:
+            name: nostr-auth-policy

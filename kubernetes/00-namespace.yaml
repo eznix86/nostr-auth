@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nostr-auth
+  labels:
+    app.kubernetes.io/name: nostr-auth
+    app.kubernetes.io/part-of: nostr-auth
+    app.kubernetes.io/component: auth
+    environment: production

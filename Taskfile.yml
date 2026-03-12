@@ -1,5 +1,82 @@
 version: "3"
+
+env:
+  OVERMIND_NO_PORT: "1"
+  OVERMIND_AUTO_RESTART: "all"
+
+vars:
+  REGISTRY: registry.brunobernard.dev
+  IMAGE_NAME: nostr-auth
+  BUILDER_NAME: nostr-auth-multiarch
+  TAG:
+    sh: |
+      if [ -n "${TAG}" ]; then
+        echo -n "${TAG}"
+      else
+        (git describe --tags --abbrev=0 2>/dev/null || git rev-parse --short HEAD) | sed 's/^v//' | tr -d '\n'
+      fi
+  FULL_IMAGE: "{{.REGISTRY}}/{{.IMAGE_NAME}}:{{.TAG}}"
 tasks:
+  image:builder:
+    desc: Ensure a multi-platform buildx builder exists
+    cmds:
+      - |
+        if ! docker buildx inspect {{.BUILDER_NAME}} >/dev/null 2>&1; then
+          docker buildx create --name {{.BUILDER_NAME}} --driver docker-container --use
+        else
+          docker buildx use {{.BUILDER_NAME}}
+        fi
+      - docker buildx inspect {{.BUILDER_NAME}} --bootstrap >/dev/null
+
+  image:build:
+    desc: Build and push the multi-arch Docker image
+    deps: [image:builder]
+    cmd: docker buildx build --builder {{.BUILDER_NAME}} --platform linux/amd64,linux/arm64 -t {{.FULL_IMAGE}} --push .
+
+  kubernetes:check-secret:
+    desc: Ensure the Kubernetes secret manifest exists
+    cmds:
+      - |
+        if [ ! -f kubernetes/06-secret.yaml ]; then
+          echo "Missing kubernetes/06-secret.yaml. Copy kubernetes/06-secret.yaml.template first." >&2
+          exit 1
+        fi
+
+  kubernetes:update-image:
+    desc: Update the Deployment image tag
+    cmd: yq e -i '.spec.template.spec.containers[0].image = "{{.FULL_IMAGE}}"' kubernetes/05-deployment.yaml
+
+  info:
+    desc: Show the image tag that will be used for deployment
+    cmd: echo "Image:" "{{.FULL_IMAGE}}"
+
+  deploy:
+    desc: Build the image and deploy to Kubernetes
+    cmds:
+      - task: kubernetes:check-secret
+      - task: kubernetes:update-image
+      - task: image:build
+      - kubectl apply -f kubernetes/
+      - kubectl rollout status deployment/nostr-auth -n nostr-auth
+
+  destroy:
+    desc: Delete the Kubernetes resources
+    cmd: kubectl delete -f kubernetes/
+
+  rollout:
+    desc: Restart the Kubernetes Deployment
+    cmd: kubectl rollout restart deployment/nostr-auth -n nostr-auth
+
+  restart:
+    desc: Delete the current Deployment pod
+    cmd: kubectl delete pod -n nostr-auth -l app.kubernetes.io/name=nostr-auth
+
+  show:
+    desc: Show Kubernetes state for the deployment
+    cmds:
+      - kubectl get pods -n nostr-auth
+      - kubectl get svc -n nostr-auth
+      - kubectl get ingress -n nostr-auth
   web:install:
     cmds:
       - bun install

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nostr-auth-env
+  namespace: nostr-auth
+  labels:
+    app.kubernetes.io/name: nostr-auth
+    app.kubernetes.io/part-of: nostr-auth
+data:
+  APP_NAME: "Nostr Auth"
+  APP_URL: "https://nostr-auth.brunobernard.dev"
+  HOST: "0.0.0.0"
+  PORT: "3000"
+  CONFIG_FILE: "/app/config.json"
+  CHALLENGE_TTL: "5m"
+  COOKIE_DOMAIN: "brunobernard.dev"
+  COOKIE_SECURE: "true"
+  SESSION_TTL: "168h"
+  NOSTR_PROFILE_FETCH_TIMEOUT: "5s"
+  NOSTR_PROFILE_CACHE_TTL: "24h"

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-nginx
+  namespace: nostr-auth
+  labels:
+    app.kubernetes.io/name: demo-nginx
+    app.kubernetes.io/part-of: nostr-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-nginx
+        app.kubernetes.io/part-of: nostr-auth
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-nginx
+  namespace: nostr-auth
+  labels:
+    app.kubernetes.io/name: demo-nginx
+    app.kubernetes.io/part-of: nostr-auth
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: demo-nginx
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-nginx
+  namespace: nostr-auth
+  labels:
+    app.kubernetes.io/name: demo-nginx
+    app.kubernetes.io/part-of: nostr-auth
+  annotations:
+    cert-manager.io/cluster-issuer: cluster-issuer-cloudflare-dns01
+    nginx.ingress.kubernetes.io/auth-url: "https://nostr-auth.brunobernard.dev/auth/check"
+    nginx.ingress.kubernetes.io/auth-signin: "https://nostr-auth.brunobernard.dev/?redirect=$scheme://$best_http_host$request_uri"
+    nginx.ingress.kubernetes.io/auth-signin-redirect-param: "redirect"
+    nginx.ingress.kubernetes.io/auth-response-headers: "Remote-User,X-Forwarded-User,X-Auth-Request-User,X-Auth-Request-Email,X-Forwarded-Groups,X-Auth-Request-Groups,X-Auth-Request-Preferred-Username,X-Auth-Request-Name,X-Auth-Request-Picture"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - demo-nostr-auth.brunobernard.dev
+      secretName: demo-nostr-auth-tls
+  rules:
+    - host: demo-nostr-auth.brunobernard.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-nginx
+                port:
+                  number: 80

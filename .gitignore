@@ -4,4 +4,5 @@ public/build
 !public/build/.gitkeep
 public/hot
 bootstrap
-auth.json
+config.json
+kubernetes/06-secret.yaml
