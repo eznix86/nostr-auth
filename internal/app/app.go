@@ -40,7 +40,7 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 		Cookie:        jar,
 		CSRF:          csrf.NewGuard(jar),
 		Inertia:       inertiaApp,
-		NostrAccounts: nostr.NewAccounts(server.DefaultRelays, cfg.ProfileFetchTimeout),
+		NostrAccounts: nostr.NewAccounts(server.DefaultRelays, cfg.ProfileFetchTimeout, cfg.ProfileCacheTTL),
 		NostrVerify:   nostr.NewVerify(),
 		Session:       session.NewSigner(cfg.AppSecret, cfg.SessionTTL),
 	}

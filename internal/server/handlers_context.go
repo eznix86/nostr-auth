@@ -142,6 +142,36 @@ func (h *Context) FetchProfile(ctx context.Context, pubkey string) (*nostr.Profi
 	return h.NostrAccounts.FetchProfile(ctx, pubkey)
 }
 
+func (h *Context) ProfileProp(w http.ResponseWriter, r *http.Request, _ string) any {
+	pubkey := AuthenticatedPubkeyFromContext(r)
+	currentProfile := h.Profile(r)
+	if currentProfile == nil && pubkey != "" {
+		cachedProfile := h.NostrAccounts.CachedProfile(pubkey)
+		if cachedProfile != nil {
+			currentProfile = cachedProfile
+			h.Account.Set(w, cachedProfile)
+		}
+	}
+
+	profile := any(currentProfile)
+	if pubkey != "" && currentProfile == nil {
+		profile = gonertia.Defer(func(ctx context.Context) (any, error) {
+			profile, err := h.FetchProfile(ctx, pubkey)
+			if err != nil {
+				return nil, nil
+			}
+			if profile == nil {
+				return nil, nil
+			}
+
+			h.Account.Set(w, profile)
+			return profile, nil
+		})
+	}
+
+	return profile
+}
+
 func (h *Context) Allowed(host, pubkey, nip05 string) bool {
 	if h.Authz == nil {
 		return false

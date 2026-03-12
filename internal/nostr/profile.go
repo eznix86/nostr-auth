@@ -3,6 +3,7 @@ package nostr
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"time"
 
@@ -31,6 +32,8 @@ type profileMetadata struct {
 	NIP05       string `json:"nip05"`
 	Banner      string `json:"banner"`
 }
+
+var ErrProfileEventNotFound = errors.New("profile event not found")
 
 var pool struct {
 	instance *nostr.Pool
@@ -102,29 +105,31 @@ func FetchProfile(ctx context.Context, pubKey string, relayURL string) (*Profile
 }
 
 func FetchProfileFromRelays(ctx context.Context, pubKey string, defaultRelays []string, timeout time.Duration) (*Profile, error) {
-	relays, err := FetchUserRelays(ctx, pubKey, defaultRelays)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(relays) == 0 {
-		relays = defaultRelays
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	relayListCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	relays, err := FetchUserRelays(relayListCtx, pubKey, defaultRelays)
+	relays = resolveProfileRelays(relays, err, defaultRelays)
+
 	for _, relay := range relays {
-		profile, err := FetchProfile(ctx, pubKey, relay)
+		relayCtx, relayCancel := context.WithTimeout(ctx, timeout)
+		profile, err := FetchProfile(relayCtx, pubKey, relay)
+		relayCancel()
 		if err != nil {
 			continue
 		}
-		if profile != nil && profile.Name != "" {
+		if hasProfileDetails(profile) {
 			return profile, nil
 		}
 	}
 
-	return FetchProfile(ctx, pubKey, defaultRelays[0])
+	if len(defaultRelays) == 0 {
+		return nil, ErrProfileEventNotFound
+	}
+
+	finalCtx, finalCancel := context.WithTimeout(ctx, timeout)
+	defer finalCancel()
+	return FetchProfile(finalCtx, pubKey, defaultRelays[0])
 }
 
 func FetchProfileWithTimeout(pubKey string, relayURL string, timeout time.Duration) (*Profile, error) {
@@ -143,12 +148,19 @@ func fetchFirstEvent(ctx context.Context, relayURLs []string, filter nostr.Filte
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case re := <-events:
+	case re, ok := <-events:
+		if !ok {
+			return nil, ErrProfileEventNotFound
+		}
 		return &re.Event, nil
 	}
 }
 
 func extractRelayURLs(event *nostr.Event) []string {
+	if event == nil {
+		return nil
+	}
+
 	var relays []string
 	for _, tag := range event.Tags {
 		if len(tag) >= 2 && tag[0] == "r" {
@@ -160,6 +172,10 @@ func extractRelayURLs(event *nostr.Event) []string {
 }
 
 func profileFromEvent(pubKey string, pk nostr.PubKey, event *nostr.Event) (*Profile, error) {
+	if event == nil {
+		return nil, ErrProfileEventNotFound
+	}
+
 	var meta profileMetadata
 	if err := json.Unmarshal([]byte(event.Content), &meta); err != nil {
 		return nil, err
@@ -176,4 +192,20 @@ func profileFromEvent(pubKey string, pk nostr.PubKey, event *nostr.Event) (*Prof
 		NIP05:       meta.NIP05,
 		Banner:      meta.Banner,
 	}, nil
+}
+
+func resolveProfileRelays(relays []string, err error, defaultRelays []string) []string {
+	if err != nil || len(relays) == 0 {
+		return defaultRelays
+	}
+
+	return relays
+}
+
+func hasProfileDetails(profile *Profile) bool {
+	if profile == nil {
+		return false
+	}
+
+	return profile.Name != "" || profile.DisplayName != "" || profile.Picture != "" || profile.NIP05 != ""
 }

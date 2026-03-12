@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -76,13 +75,6 @@ func (a *Auth) Verify(w http.ResponseWriter, r *http.Request) {
 	if !a.H.SetAuth(w, evt.PubKey.Hex()) {
 		a.H.Fail(w, nil, "failed to issue auth session")
 		return
-	}
-
-	profile, err := a.H.FetchProfile(context.Background(), evt.PubKey.Hex())
-	if err != nil {
-		a.H.Log.Error().Err(err).Str("handler", "auth.verify").Msg("failed to fetch profile")
-	} else if profile != nil {
-		a.H.Account.Set(w, profile)
 	}
 
 	a.H.Cookie.Clear(w, challenge.SessionCookieName)
