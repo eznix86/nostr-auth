@@ -169,11 +169,16 @@ jobs:
           MAJOR_TAG: ${{ needs.prepare.outputs.major }}
           MAJOR_MINOR_TAG: ${{ needs.prepare.outputs.major_minor }}
         run: |
+          sources=""
+          for digest in *; do
+            sources="$sources ${IMAGE}@sha256:${digest}"
+          done
+
           docker buildx imagetools create \
             -t "${IMAGE}:${VERSION_TAG}" \
             -t "${IMAGE}:${MAJOR_MINOR_TAG}" \
             -t "${IMAGE}:${MAJOR_TAG}" \
-            $(printf '%s@sha256:%s ' "$IMAGE" *)
+            ${sources}
 
       - name: Inspect image
         env:
