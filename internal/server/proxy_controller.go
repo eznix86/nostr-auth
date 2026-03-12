@@ -11,7 +11,7 @@ type Proxy struct{ H *Context }
 func (p *Proxy) Check(w http.ResponseWriter, r *http.Request) {
 	pubkey := AuthenticatedPubkeyFromContext(r)
 	if pubkey == "" {
-		if WantsBrowserRedirect(r) {
+		if WantsBrowserRedirect(r) && !IsForwardAuthSubrequest(r) {
 			target := p.H.NostrAccounts.LoginURL(p.H.Config.AppURL, url.QueryEscape(ForwardedURL(r)))
 			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 			return

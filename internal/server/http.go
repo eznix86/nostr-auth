@@ -69,6 +69,10 @@ func WantsBrowserRedirect(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
+func IsForwardAuthSubrequest(r *http.Request) bool {
+	return r.Header.Get("X-Original-URI") != "" || r.Header.Get("X-Original-URL") != "" || r.Header.Get("X-Original-Method") != ""
+}
+
 func headerOr(r *http.Request, key, fallback string) string {
 	value := r.Header.Get(key)
 	if value == "" {
