@@ -22,16 +22,28 @@ func (p *Proxy) Check(w http.ResponseWriter, r *http.Request) {
 	}
 
 	profile := p.H.Profile(r)
+	if profile == nil {
+		fetched, err := p.H.FetchProfile(r.Context(), pubkey)
+		if err != nil {
+			p.H.Log.Error().Err(err).Str("handler", "proxy.check").Msg("failed to fetch profile")
+		} else if fetched != nil {
+			profile = fetched
+			p.H.Account.Set(w, profile)
+		}
+	}
+
 	nip05 := ""
 	if profile != nil {
 		nip05 = profile.NIP05
 	}
-	if !p.H.Allowed(ForwardedHost(r), pubkey, nip05) {
+	host := ForwardedHost(r)
+	if !p.H.Allowed(host, pubkey, nip05) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	groups := p.H.Groups(host, pubkey, nip05)
 
-	for key, value := range p.H.NostrAccounts.Headers(pubkey, profile) {
+	for key, value := range p.H.NostrAccounts.Headers(pubkey, profile, groups) {
 		w.Header().Set(key, value)
 	}
 	w.WriteHeader(http.StatusOK)

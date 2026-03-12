@@ -23,7 +23,14 @@ task demo
 - each proxy calls `http://host.docker.internal:3000/auth/check`
 - if you are not logged in, the proxy sends you to `nostr-auth`
 - after signing in, `nostr-auth` redirects you back to the original URL
-- if you are logged in, the proxy forwards user headers to the upstream demo
+- if you are logged in, the proxy forwards user and group headers to the upstream demo
+
+## Forwarded headers
+
+- user: `Remote-User`, `X-Forwarded-User`, `X-Auth-Request-User`
+- email: `X-Auth-Request-Email`
+- groups: `X-Forwarded-Groups`, `X-Auth-Request-Groups`
+- profile: `X-Auth-Request-Preferred-Username`, `X-Auth-Request-Name`, `X-Auth-Request-Picture`
 
 ## Notes
 

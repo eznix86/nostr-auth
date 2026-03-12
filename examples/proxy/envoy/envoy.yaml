@@ -48,6 +48,8 @@ static_resources:
                               - exact: x-forwarded-user
                               - exact: x-auth-request-user
                               - exact: x-auth-request-email
+                              - exact: x-forwarded-groups
+                              - exact: x-auth-request-groups
                               - exact: x-auth-request-preferred-username
                               - exact: x-auth-request-name
                               - exact: x-auth-request-picture

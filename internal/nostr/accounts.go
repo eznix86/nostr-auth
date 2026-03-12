@@ -59,6 +59,11 @@ func (a *Accounts) Headers(pubkey string, profile *Profile, groups []string) map
 	}
 
 	if profile == nil {
+		if len(groups) > 0 {
+			joinedGroups := strings.Join(groups, ",")
+			headers["X-Forwarded-Groups"] = joinedGroups
+			headers["X-Auth-Request-Groups"] = joinedGroups
+		}
 		return headers
 	}
 
@@ -75,6 +80,11 @@ func (a *Accounts) Headers(pubkey string, profile *Profile, groups []string) map
 	if profile.Picture != "" {
 		headers["Remote-User-Picture"] = profile.Picture
 		headers["X-Auth-Request-Picture"] = profile.Picture
+	}
+	if len(groups) > 0 {
+		joinedGroups := strings.Join(groups, ",")
+		headers["X-Forwarded-Groups"] = joinedGroups
+		headers["X-Auth-Request-Groups"] = joinedGroups
 	}
 
 	return headers

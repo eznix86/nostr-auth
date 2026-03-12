@@ -180,6 +180,14 @@ func (h *Context) Allowed(host, pubkey, nip05 string) bool {
 	return h.Authz.Allowed(host, pubkey, nip05)
 }
 
+func (h *Context) Groups(host, pubkey, nip05 string) []string {
+	if h.Authz == nil {
+		return nil
+	}
+
+	return h.Authz.Groups(host, pubkey, nip05)
+}
+
 func (h *Context) WithAuthenticatedPubkey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pubkey := h.AuthenticatedPubkey(r)
