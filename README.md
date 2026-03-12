@@ -85,6 +85,9 @@ Should be available on http://localhost:3000
 - `branding.background.source.variant` can be `canyon-falls` (default), `fields-road`, `mountain-valley`, or `storm-valley`
 - if `branding` is omitted, the app falls back to `canyon-falls`
 
+> [!IMPORTANT]
+> Prefer `npub` values for real access control. An `npub` identifies a specific public key, so it stays stable over time. A NIP-05 identifier is easier to read and useful in testing or development, but its ownership can change, which may unintentionally change who matches a rule.
+
 ## Testing Demo
 
 - `bun install`
