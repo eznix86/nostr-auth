@@ -1,6 +1,9 @@
-name: GoReleaser Manual
+name: GoReleaser Release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -15,7 +18,8 @@ jobs:
       contents: write
 
     steps:
-      - name: Validate tag
+      - name: Validate manual tag
+        if: github.event_name == 'workflow_dispatch'
         env:
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
@@ -30,7 +34,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set up Go
