@@ -1,0 +1,41 @@
+version: 2
+
+project_name: nostr-auth
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: nostr-auth
+    main: ./cmd/web
+    binary: nostr-auth
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: binaries
+    ids:
+      - nostr-auth
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true
+
+release:
+  draft: false
+  prerelease: auto

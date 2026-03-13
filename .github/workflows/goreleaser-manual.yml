@@ -1,0 +1,62 @@
+name: GoReleaser Manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Git tag to build and upload to the existing release
+        required: true
+        type: string
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Validate tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          case "$INPUT_TAG" in
+            v*) ;;
+            *)
+              echo "Tag must start with 'v'" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1
+
+      - name: Install Task
+        uses: go-task/setup-task@v1
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend assets
+        run: task web:build
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
