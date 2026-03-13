@@ -178,6 +178,7 @@ jobs:
             -t "${IMAGE}:${VERSION_TAG}" \
             -t "${IMAGE}:${MAJOR_MINOR_TAG}" \
             -t "${IMAGE}:${MAJOR_TAG}" \
+            -t "${IMAGE}:latest" \
             ${sources}
 
       - name: Inspect image
