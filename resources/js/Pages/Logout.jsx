@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 export default function Logout({ authenticatedPubkey, profile, title }) {
   const [error, setError] = useState("");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const identityLabel = displayIdentity(profile, authenticatedPubkey);
 
   async function logout() {
     try {
@@ -34,14 +35,14 @@ export default function Logout({ authenticatedPubkey, profile, title }) {
         <CardContent className="flex flex-col gap-4">
           <Deferred data="profile" fallback={<ProfileSkeleton />}>
             {profile ? (
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex min-w-0 flex-col items-center gap-2">
                 {profile.picture ? <img src={profile.picture} alt={profile.name || profile.display_name} className="h-12 w-12 rounded-full" /> : null}
-                <p className="text-sm font-medium">{profile.display_name || profile.name || authenticatedPubkey}</p>
-                {profile.nip05 ? <p className="text-xs text-muted-foreground">{profile.nip05}</p> : null}
+                <p className="max-w-full truncate text-sm font-medium" title={identityLabel}>{identityLabel}</p>
+                {profile.nip05 ? <p className="max-w-full truncate text-xs text-muted-foreground" title={profile.nip05}>{profile.nip05}</p> : null}
               </div>
             ) : (
-              <div className="text-center text-sm text-muted-foreground">
-                Signed in as <code>{authenticatedPubkey}</code>
+              <div className="min-w-0 text-center text-sm text-muted-foreground">
+                Signed in as <code className="break-all" title={authenticatedPubkey}>{shortPubkey(authenticatedPubkey)}</code>
               </div>
             )}
           </Deferred>
@@ -57,6 +58,36 @@ export default function Logout({ authenticatedPubkey, profile, title }) {
       </Card>
     </>
   );
+}
+
+function displayIdentity(profile, authenticatedPubkey) {
+  const displayName = profile?.display_name?.trim();
+  if (displayName) {
+    return shortenLabel(displayName);
+  }
+
+  const name = profile?.name?.trim();
+  if (name) {
+    return shortenLabel(name);
+  }
+
+  return shortPubkey(authenticatedPubkey);
+}
+
+function shortenLabel(value) {
+  if (!value || value.length <= 32) {
+    return value;
+  }
+
+  return `${value.slice(0, 14)}...${value.slice(-14)}`;
+}
+
+function shortPubkey(pubkey) {
+  if (!pubkey || pubkey.length <= 28) {
+    return pubkey;
+  }
+
+  return `${pubkey.slice(0, 14)}...${pubkey.slice(-14)}`;
 }
 
 async function fetchCsrfToken() {
