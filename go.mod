@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	fiatjaf.com/nostr v0.0.0-20260309015836-4348c64b14cc
+	fiatjaf.com/nostr v0.0.0-20260314085316-2cec1c943486
 	github.com/romsar/gonertia/v2 v2.1.1
 	github.com/rs/zerolog v1.34.0
 )
