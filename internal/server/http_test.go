@@ -15,9 +15,7 @@ import (
 	nostrlib "fiatjaf.com/nostr"
 	"github.com/eznix86/nostr-auth/internal/account"
 	"github.com/eznix86/nostr-auth/internal/app"
-	"github.com/eznix86/nostr-auth/internal/challenge"
 	"github.com/eznix86/nostr-auth/internal/config"
-	"github.com/eznix86/nostr-auth/internal/csrf"
 	"github.com/eznix86/nostr-auth/internal/nostr"
 	serverpkg "github.com/eznix86/nostr-auth/internal/server"
 	"github.com/eznix86/nostr-auth/internal/session"
@@ -120,7 +118,7 @@ func TestCSRFEndpointReturnsToken(t *testing.T) {
 	}
 
 	setCookieHeader := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
-	if !strings.Contains(setCookieHeader, csrf.CookieName+"=") {
+	if !strings.Contains(setCookieHeader, serverpkg.CSRFCookieName+"=") {
 		t.Fatal("expected csrf cookie to be set")
 	}
 }
@@ -149,8 +147,50 @@ func TestChallengeEndpointReturnsToken(t *testing.T) {
 	}
 
 	setCookieHeader := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
-	if !strings.Contains(setCookieHeader, challenge.SessionCookieName+"=") {
-		t.Fatal("expected challenge session cookie to be set")
+	if !strings.Contains(setCookieHeader, session.ChallengeCookieName+"=") {
+		t.Fatal("expected challenge cookie to be set")
+	}
+}
+
+func TestHomeStoresIntendedURLAndExposesItInProps(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/?redirect=http://demo.local/private", nil)
+	req.Header.Set("X-Inertia", "true")
+
+	app.Routes().ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+
+	var intendedCookie *http.Cookie
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == session.IntendedURLCookieName {
+			intendedCookie = cookie
+			break
+		}
+	}
+
+	if intendedCookie == nil {
+		t.Fatal("expected intended url cookie to be set")
+	}
+
+	var payload struct {
+		Props map[string]any `json:"props"`
+	}
+	if err := json.NewDecoder(recorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if got := payload.Props["intendedUrl"]; got != "http://demo.local/private" {
+		t.Fatalf("props.intendedUrl = %#v, want %q", got, "http://demo.local/private")
+	}
+
+	if got, err := app.Handler.Session.VerifyIntendedURL(intendedCookie.Value); err != nil {
+		t.Fatalf("VerifyIntendedURL() error = %v", err)
+	} else if got != "http://demo.local/private" {
+		t.Fatalf("intended url = %q, want %q", got, "http://demo.local/private")
 	}
 }
 
@@ -158,26 +198,26 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	secretKey := nostrlib.Generate()
 	app := newTestApp(t)
 
-	challengeValue, err := app.Handlers.Challenge.Issue("challenge-session")
+	challengeToken, signedChallenge, err := issueChallengeForTest(app, "/private", 5*time.Minute)
 	if err != nil {
-		t.Fatalf("Issue() error = %v", err)
+		t.Fatalf("issueChallengeForTest() error = %v", err)
 	}
 
 	evt := nostrlib.Event{
 		CreatedAt: nostrlib.Now(),
 		Kind:      22242,
-		Tags:      nostrlib.Tags{{"challenge", challengeValue.Token}, {"relay", "127.0.0.1:3000"}},
+		Tags:      nostrlib.Tags{{"challenge", challengeToken}, {"relay", "127.0.0.1:3000"}},
 	}
 	if err := evt.Sign(secretKey); err != nil {
 		t.Fatalf("Sign() error = %v", err)
 	}
 
-	csrfToken, err := app.Handlers.CSRF.Ensure(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	csrfToken, err := issueCsrfForTest(app)
 	if err != nil {
-		t.Fatalf("EnsureCSRFToken() error = %v", err)
+		t.Fatalf("issueCsrfForTest() error = %v", err)
 	}
 
-	body, err := json.Marshal(serverpkg.VerifyChallengeRequest{Event: evt.String(), RedirectTo: "/private"})
+	body, err := json.Marshal(serverpkg.VerifyChallengeRequest{Event: evt.String()})
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
@@ -185,8 +225,8 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/auth/verify", bytes.NewReader(body))
 	req.Host = "127.0.0.1:3000"
-	req.AddCookie(&http.Cookie{Name: challenge.SessionCookieName, Value: "challenge-session"})
-	req.AddCookie(&http.Cookie{Name: csrf.CookieName, Value: csrfToken})
+	req.AddCookie(&http.Cookie{Name: session.ChallengeCookieName, Value: signedChallenge})
+	req.AddCookie(&http.Cookie{Name: serverpkg.CSRFCookieName, Value: csrfToken})
 	req.Header.Set("X-CSRF-Token", csrfToken)
 
 	app.Routes().ServeHTTP(recorder, req)
@@ -201,12 +241,16 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 
 	var sessionCookie *http.Cookie
 	var clearedChallenge bool
+	var clearedIntendedURL bool
 	for _, cookie := range recorder.Result().Cookies() {
 		if cookie.Name == session.CookieName {
 			sessionCookie = cookie
 		}
-		if cookie.Name == challenge.SessionCookieName && cookie.MaxAge == -1 {
+		if cookie.Name == session.ChallengeCookieName && cookie.MaxAge == -1 {
 			clearedChallenge = true
+		}
+		if cookie.Name == session.IntendedURLCookieName && cookie.MaxAge == -1 {
+			clearedIntendedURL = true
 		}
 	}
 
@@ -217,10 +261,13 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	if !clearedChallenge {
 		t.Fatal("expected challenge cookie to be cleared")
 	}
+	if !clearedIntendedURL {
+		t.Fatal("expected intended url cookie to be cleared")
+	}
 
 	verifyReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	verifyReq.AddCookie(sessionCookie)
-	if got := app.Handlers.AuthenticatedPubkey(verifyReq); got != secretKey.Public().Hex() {
+	if got := app.Handler.AuthenticatedPubkey(verifyReq); got != secretKey.Public().Hex() {
 		t.Fatalf("authenticated pubkey = %q, want %q", got, secretKey.Public().Hex())
 	}
 }
@@ -261,11 +308,12 @@ func TestLogoutClearsSessionAndChallengeCookies(t *testing.T) {
 	app := newTestApp(t)
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
-	csrfToken, err := app.Handlers.CSRF.Ensure(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	csrfToken, err := issueCsrfForTest(app)
 	if err != nil {
-		t.Fatalf("EnsureCSRFToken() error = %v", err)
+		t.Fatalf("issueCsrfForTest() error = %v", err)
 	}
-	req.AddCookie(&http.Cookie{Name: csrf.CookieName, Value: csrfToken})
+	req.AddCookie(&http.Cookie{Name: serverpkg.CSRFCookieName, Value: csrfToken})
 	req.Header.Set("X-CSRF-Token", csrfToken)
 
 	app.Routes().ServeHTTP(recorder, req)
@@ -278,23 +326,29 @@ func TestLogoutClearsSessionAndChallengeCookies(t *testing.T) {
 	if !strings.Contains(setCookieHeader, session.CookieName+"=") {
 		t.Fatal("expected session cookie to be cleared")
 	}
-	if !strings.Contains(setCookieHeader, challenge.SessionCookieName+"=") {
+	if !strings.Contains(setCookieHeader, session.ChallengeCookieName+"=") {
 		t.Fatal("expected challenge cookie to be cleared")
 	}
-	if !strings.Contains(setCookieHeader, csrf.CookieName+"=") {
+	if !strings.Contains(setCookieHeader, session.IntendedURLCookieName+"=") {
+		t.Fatal("expected intended url cookie to be cleared")
+	}
+	if !strings.Contains(setCookieHeader, serverpkg.CSRFCookieName+"=") {
 		t.Fatal("expected csrf cookie to be cleared")
 	}
 }
 
 func TestVerifyChallengeRejectsInvalidCSRF(t *testing.T) {
 	app := newTestApp(t)
-	if _, err := app.Handlers.Challenge.Issue("challenge-session"); err != nil {
-		t.Fatalf("Issue() error = %v", err)
+
+	_, signedChallenge, err := issueChallengeForTest(app, "/private", 5*time.Minute)
+	if err != nil {
+		t.Fatalf("issueChallengeForTest() error = %v", err)
 	}
+
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/auth/verify", bytes.NewReader([]byte(`{"csrfToken":"bad"}`)))
-	req.AddCookie(&http.Cookie{Name: challenge.SessionCookieName, Value: "challenge-session"})
-	req.AddCookie(&http.Cookie{Name: csrf.CookieName, Value: "good"})
+	req.AddCookie(&http.Cookie{Name: session.ChallengeCookieName, Value: signedChallenge})
+	req.AddCookie(&http.Cookie{Name: serverpkg.CSRFCookieName, Value: "good"})
 	req.Header.Set("X-CSRF-Token", "bad")
 
 	app.Routes().ServeHTTP(recorder, req)
@@ -303,8 +357,47 @@ func TestVerifyChallengeRejectsInvalidCSRF(t *testing.T) {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
 	}
 
-	if got := recorder.Header().Get("Location"); got != "/?auth_error=invalid_csrf" {
-		t.Fatalf("location = %q, want %q", got, "/?auth_error=invalid_csrf")
+	if got := recorder.Header().Get("Location"); got != "/" {
+		t.Fatalf("location = %q, want %q", got, "/")
+	}
+
+	setCookieHeader := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
+	if !strings.Contains(setCookieHeader, "nostr_auth_flash=") {
+		t.Fatal("expected flash cookie to be set with auth error")
+	}
+
+	var flashCookie *http.Cookie
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == "nostr_auth_flash" {
+			flashCookie = cookie
+			break
+		}
+	}
+
+	if flashCookie == nil {
+		t.Fatal("expected flash cookie in response")
+	}
+
+	homeRecorder := httptest.NewRecorder()
+	homeReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	homeReq.Header.Set("X-Inertia", "true")
+	homeReq.AddCookie(flashCookie)
+
+	app.Routes().ServeHTTP(homeRecorder, homeReq)
+
+	if homeRecorder.Code != http.StatusOK {
+		t.Fatalf("home status = %d, want %d", homeRecorder.Code, http.StatusOK)
+	}
+
+	var payload struct {
+		Flash map[string]any `json:"flash"`
+	}
+	if err := json.NewDecoder(homeRecorder.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode() error = %v", err)
+	}
+
+	if got := payload.Flash["error"]; got != "Your session expired. Please try again." {
+		t.Fatalf("flash.error = %#v, want %q", got, "Your session expired. Please try again.")
 	}
 }
 
@@ -465,11 +558,31 @@ func newTestAppWithConfig(t *testing.T, cfg config.Config) *serverpkg.App {
 	return serverApp
 }
 
+func issueChallengeForTest(a *serverpkg.App, intendedURL string, ttl time.Duration) (token, signed string, err error) {
+	token = "test-challenge-token"
+	signed, err = a.Handler.Session.SignChallenge(token, intendedURL, ttl)
+	return
+}
+
+func issueCsrfForTest(a *serverpkg.App) (string, error) {
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/csrf", nil)
+	a.Routes().ServeHTTP(recorder, req)
+
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == serverpkg.CSRFCookieName {
+			return cookie.Value, nil
+		}
+	}
+
+	return "", nil
+}
+
 func authCookie(t *testing.T, app *serverpkg.App, pubkey string) *http.Cookie {
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	if !app.Handlers.SetAuth(recorder, pubkey) {
+	if !app.Handler.SetAuth(recorder, pubkey) {
 		t.Fatal("expected auth session cookie")
 	}
 

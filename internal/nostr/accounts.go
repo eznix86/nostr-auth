@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type Accounts struct {
+type Client struct {
 	defaultRelays []string
 	timeout       time.Duration
 	cacheTTL      time.Duration
@@ -22,8 +22,8 @@ type cachedProfile struct {
 	expiresAt time.Time
 }
 
-func NewAccounts(defaultRelays []string, timeout, cacheTTL time.Duration) *Accounts {
-	return &Accounts{
+func NewClient(defaultRelays []string, timeout, cacheTTL time.Duration) *Client {
+	return &Client{
 		defaultRelays: append([]string(nil), defaultRelays...),
 		timeout:       timeout,
 		cacheTTL:      cacheTTL,
@@ -32,7 +32,7 @@ func NewAccounts(defaultRelays []string, timeout, cacheTTL time.Duration) *Accou
 	}
 }
 
-func (a *Accounts) FetchProfile(ctx context.Context, pubkey string) (*Profile, error) {
+func (a *Client) FetchProfile(ctx context.Context, pubkey string) (*Profile, error) {
 	if profile := a.profileFromCache(pubkey); profile != nil {
 		return profile, nil
 	}
@@ -46,11 +46,11 @@ func (a *Accounts) FetchProfile(ctx context.Context, pubkey string) (*Profile, e
 	return profile, nil
 }
 
-func (a *Accounts) CachedProfile(pubkey string) *Profile {
+func (a *Client) CachedProfile(pubkey string) *Profile {
 	return a.profileFromCache(pubkey)
 }
 
-func (a *Accounts) Headers(pubkey string, profile *Profile, groups []string) map[string]string {
+func (a *Client) Headers(pubkey string, profile *Profile, groups []string) map[string]string {
 	npub := Npub(pubkey)
 	headers := map[string]string{
 		"Remote-User":         npub,
@@ -90,11 +90,11 @@ func (a *Accounts) Headers(pubkey string, profile *Profile, groups []string) map
 	return headers
 }
 
-func (a *Accounts) LoginURL(appURL, redirectTo string) string {
-	return fmt.Sprintf("%s/?redirect=%s", strings.TrimRight(appURL, "/"), redirectTo)
+func (a *Client) LoginURL(appURL, intendedURL string) string {
+	return fmt.Sprintf("%s/?redirect=%s", strings.TrimRight(appURL, "/"), intendedURL)
 }
 
-func (a *Accounts) profileFromCache(pubkey string) *Profile {
+func (a *Client) profileFromCache(pubkey string) *Profile {
 	if pubkey == "" || a.cacheTTL <= 0 {
 		return nil
 	}
@@ -116,7 +116,7 @@ func (a *Accounts) profileFromCache(pubkey string) *Profile {
 	return entry.profile
 }
 
-func (a *Accounts) storeProfile(pubkey string, profile *Profile) {
+func (a *Client) storeProfile(pubkey string, profile *Profile) {
 	if pubkey == "" || profile == nil || a.cacheTTL <= 0 {
 		return
 	}

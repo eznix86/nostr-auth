@@ -8,20 +8,15 @@ import (
 )
 
 const (
-	AuthErrorMissingChallenge     = "missing_challenge"
-	AuthErrorInvalidPayload       = "invalid_payload"
-	AuthErrorInvalidEvent         = "invalid_event"
-	AuthErrorVerificationFailed   = "verification_failed"
-	AuthErrorChallengeUnavailable = "challenge_unavailable"
-	AuthErrorInvalidCSRF          = "invalid_csrf"
+	AuthErrorMissingChallenge     = "Your login challenge expired. Please start again."
+	AuthErrorInvalidPayload       = "We could not verify your Nostr login. Please try again."
+	AuthErrorInvalidEvent         = "We could not verify your Nostr login. Please try again."
+	AuthErrorVerificationFailed   = "We could not verify your Nostr login. Please try again."
+	AuthErrorChallengeUnavailable = "Your login challenge expired. Please start again."
+	AuthErrorInvalidCSRF          = "Your session expired. Please try again."
 )
 
 var DefaultRelays = []string{"wss://nos.lol", "wss://relay.damus.io", "wss://nostr.wine"}
-
-type VerifyChallengeRequest struct {
-	Event      string `json:"event"`
-	RedirectTo string `json:"redirectTo"`
-}
 
 func SafeRedirect(target string) string {
 	if target == "" {

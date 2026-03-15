@@ -1,4 +1,4 @@
-import { Head, router } from "@inertiajs/react";
+import { Head, router, usePage } from "@inertiajs/react";
 import { useState } from "react";
 import { Check, Copy, Link, QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -10,7 +10,10 @@ import { ProviderButton } from "../components/ui/provider-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { clearRemoteSignerSession, connectToBunker, getExtensionSigner, persistRemoteSignerSession, resumeRemoteSignerSession, startRemoteSignerSession } from "../lib/nostr-signer";
 
-export default function Home({ authError, redirectTo, title }) {
+export default function Home() {
+  const { flash } = usePage();
+  const { intendedUrl, title } = usePage().props;
+  const authError = flash?.error || "";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [connectUri, setConnectUri] = useState("");
@@ -41,7 +44,7 @@ export default function Home({ authError, redirectTo, title }) {
 
       router.post(
         "/auth/verify",
-        { event: JSON.stringify(event), redirectTo },
+        { event: JSON.stringify(event) },
         {
           preserveScroll: true,
           preserveState: false,
@@ -182,7 +185,7 @@ export default function Home({ authError, redirectTo, title }) {
     }
   }
 
-  const helper = error || authError ? error || authError.replaceAll("_", " ") : redirectTo ? "You will return to your app after signing in." : statusLabel(status);
+  const helper = error || authError ? error || authError : intendedUrl ? "You will return to your app after signing in." : statusLabel(status);
 
   return (
     <>

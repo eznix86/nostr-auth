@@ -6,19 +6,19 @@ import (
 	"time"
 )
 
-func TestAccountsFetchProfileUsesCache(t *testing.T) {
-	accounts := NewAccounts([]string{"wss://nos.lol"}, time.Second, time.Hour)
+func TestClientFetchProfileUsesCache(t *testing.T) {
+	client := NewClient([]string{"wss://nos.lol"}, time.Second, time.Hour)
 	called := 0
-	accounts.fetchProfile = func(_ context.Context, pubkey string, relays []string, timeout time.Duration) (*Profile, error) {
+	client.fetchProfile = func(_ context.Context, pubkey string, relays []string, timeout time.Duration) (*Profile, error) {
 		called++
 		return &Profile{PubKey: pubkey, DisplayName: "bruno"}, nil
 	}
 
-	first, err := accounts.FetchProfile(context.Background(), "pubkey-1")
+	first, err := client.FetchProfile(context.Background(), "pubkey-1")
 	if err != nil {
 		t.Fatalf("FetchProfile() error = %v", err)
 	}
-	second, err := accounts.FetchProfile(context.Background(), "pubkey-1")
+	second, err := client.FetchProfile(context.Background(), "pubkey-1")
 	if err != nil {
 		t.Fatalf("FetchProfile() error = %v", err)
 	}
@@ -31,22 +31,22 @@ func TestAccountsFetchProfileUsesCache(t *testing.T) {
 	}
 }
 
-func TestAccountsFetchProfileRefetchesAfterCacheExpiry(t *testing.T) {
-	accounts := NewAccounts([]string{"wss://nos.lol"}, time.Second, 10*time.Millisecond)
+func TestClientFetchProfileRefetchesAfterCacheExpiry(t *testing.T) {
+	client := NewClient([]string{"wss://nos.lol"}, time.Second, 10*time.Millisecond)
 	called := 0
-	accounts.fetchProfile = func(_ context.Context, pubkey string, relays []string, timeout time.Duration) (*Profile, error) {
+	client.fetchProfile = func(_ context.Context, pubkey string, relays []string, timeout time.Duration) (*Profile, error) {
 		called++
 		return &Profile{PubKey: pubkey, DisplayName: time.Now().Format(time.RFC3339Nano)}, nil
 	}
 
-	first, err := accounts.FetchProfile(context.Background(), "pubkey-1")
+	first, err := client.FetchProfile(context.Background(), "pubkey-1")
 	if err != nil {
 		t.Fatalf("FetchProfile() error = %v", err)
 	}
 
 	time.Sleep(20 * time.Millisecond)
 
-	second, err := accounts.FetchProfile(context.Background(), "pubkey-1")
+	second, err := client.FetchProfile(context.Background(), "pubkey-1")
 	if err != nil {
 		t.Fatalf("FetchProfile() error = %v", err)
 	}

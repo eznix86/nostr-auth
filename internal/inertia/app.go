@@ -8,12 +8,14 @@ import (
 	gonertia "github.com/romsar/gonertia/v2"
 )
 
-type App struct {
+type Inertia struct {
 	vite *gonertia.ViteInstance
 }
 
-func New(cfg config.Config) (*App, error) {
+func New(cfg config.Config, opts ...gonertia.Option) (*Inertia, error) {
 	options := []gonertia.Option{}
+	options = append(options, opts...)
+
 	if cfg.SSRURL != "" {
 		options = append(options, gonertia.WithSSR(cfg.SSRURL))
 	}
@@ -30,25 +32,25 @@ func New(cfg config.Config) (*App, error) {
 		return nil, err
 	}
 
-	return &App{vite: vite}, nil
+	return &Inertia{vite: vite}, nil
 }
 
-func (a *App) Middleware(next http.Handler) http.Handler {
+func (a *Inertia) Middleware(next http.Handler) http.Handler {
 	return a.vite.Middleware(next)
 }
 
-func (a *App) Render(w http.ResponseWriter, r *http.Request, component string, props gonertia.Props) error {
+func (a *Inertia) Render(w http.ResponseWriter, r *http.Request, component string, props gonertia.Props) error {
 	return a.vite.Render(w, r, component, props)
 }
 
-func (a *App) ShareProp(key string, val any) {
+func (a *Inertia) ShareProp(key string, val any) {
 	a.vite.ShareProp(key, val)
 }
 
-func (a *App) ShareTemplateData(key string, val any) {
+func (a *Inertia) ShareTemplateData(key string, val any) {
 	a.vite.ShareTemplateData(key, val)
 }
 
-func (a *App) Redirect(w http.ResponseWriter, r *http.Request, location string, status int) {
+func (a *Inertia) Redirect(w http.ResponseWriter, r *http.Request, location string, status int) {
 	a.vite.Location(w, r, location, status)
 }

@@ -20,8 +20,10 @@ func NewRouter(app *App) (chi.Router, error) {
 		return nil, fmt.Errorf("failed to mount public assets: %w", err)
 	}
 
+	h := app.Handler
+
 	r := chi.NewRouter()
-	r.Use(app.Handlers.WithAuthenticatedPubkey)
+	r.Use(h.WithAuthenticatedPubkey)
 	r.Get("/healthz", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if !app.IsReady() {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -32,21 +34,22 @@ func NewRouter(app *App) (chi.Router, error) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}))
-	r.HandleFunc("/auth/check", app.Proxy.Check)
-	r.HandleFunc("/auth/check/*", app.Proxy.Check)
+	r.HandleFunc("/auth/check", h.ProxyCheck)
+	r.HandleFunc("/auth/check/*", h.ProxyCheck)
 	r.Handle("/public/*", http.StripPrefix("/public/", http.FileServer(http.FS(publicAssets))))
 	r.Handle("/build/*", http.StripPrefix("/build/", http.FileServer(http.FS(builtAssets))))
 
 	r.Group(func(r chi.Router) {
-		r.Use(app.Handlers.Inertia.Middleware)
-		r.Get("/", app.Home.Index)
-		r.Get("/auth/csrf", app.Auth.CSRF)
-		r.Get("/auth/challenge", app.Auth.Challenge)
-		r.Get("/logout", app.Logout.Index)
+		r.Use(h.FlashMiddleware)
+		r.Use(h.Inertia.Middleware)
+		r.Get("/", h.HomeIndex)
+		r.Get("/auth/csrf", h.AuthCSRF)
+		r.Get("/auth/challenge", h.AuthChallenge)
+		r.Get("/logout", h.LogoutIndex)
 		r.Group(func(r chi.Router) {
-			r.Use(app.Handlers.RequireCSRF)
-			r.With(app.Handlers.WithChallenge).Post("/auth/verify", app.Auth.Verify)
-			r.Post("/logout", app.Auth.Logout)
+			r.Use(h.RequireCSRF)
+			r.With(h.WithChallenge).Post("/auth/verify", h.AuthVerify)
+			r.Post("/logout", h.LogoutSubmit)
 		})
 	})
 

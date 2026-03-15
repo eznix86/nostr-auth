@@ -6,26 +6,30 @@ import (
 	gonertia "github.com/romsar/gonertia/v2"
 )
 
-type Home struct{ H *Context }
-
-func (h *Home) Index(w http.ResponseWriter, r *http.Request) {
-	redirectTo := r.URL.Query().Get("redirect")
-	if AuthenticatedPubkeyFromContext(r) != "" && redirectTo != "" {
-		h.H.Redirect(w, r, SafeRedirect(redirectTo), http.StatusSeeOther)
+func (h *Handler) HomeIndex(w http.ResponseWriter, r *http.Request) {
+	intendedURL := SafeRedirect(r.URL.Query().Get("redirect"))
+	if AuthenticatedPubkeyFromContext(r) != "" && intendedURL != "/" {
+		h.Redirect(w, r, intendedURL, http.StatusSeeOther)
 		return
 	}
 	if AuthenticatedPubkeyFromContext(r) != "" {
-		h.H.Redirect(w, r, "/logout", http.StatusSeeOther)
+		h.Redirect(w, r, "/logout", http.StatusSeeOther)
 		return
 	}
 
-	err := h.H.Render(w, r, "Home", gonertia.Props{
-		"title":      h.H.Config.AppName,
-		"message":    "A tiny Nostr-first auth app in Go.",
-		"redirectTo": redirectTo,
-		"authError":  r.URL.Query().Get("auth_error"),
+	if intendedURL == "/" {
+		intendedURL = ""
+	}
+	if !h.SetIntendedURL(w, intendedURL) {
+		h.Fail(w, nil, "failed to store intended url")
+		return
+	}
+
+	err := h.Render(w, r, "Home", gonertia.Props{
+		"title":       h.Config.AppName,
+		"intendedUrl": intendedURL,
 	})
 	if err != nil {
-		h.H.Fail(w, err, "failed to render home page")
+		h.Fail(w, err, "failed to render home page")
 	}
 }

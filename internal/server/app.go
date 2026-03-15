@@ -7,13 +7,9 @@ import (
 )
 
 type App struct {
-	Handlers *Context
-	Auth     *Auth
-	Home     *Home
-	Logout   *LogoutPage
-	Proxy    *Proxy
-	router   chi.Router
-	ready    atomic.Bool
+	Handler *Handler
+	router  chi.Router
+	ready   atomic.Bool
 }
 
 func (a *App) Routes() chi.Router {

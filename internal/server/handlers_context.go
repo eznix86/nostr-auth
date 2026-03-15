@@ -2,15 +2,16 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"net/http"
 
 	"github.com/eznix86/nostr-auth/internal/account"
 	"github.com/eznix86/nostr-auth/internal/authorization"
-	"github.com/eznix86/nostr-auth/internal/challenge"
 	"github.com/eznix86/nostr-auth/internal/config"
 	"github.com/eznix86/nostr-auth/internal/cookie"
-	"github.com/eznix86/nostr-auth/internal/csrf"
-	appinertia "github.com/eznix86/nostr-auth/internal/inertia"
+	"github.com/eznix86/nostr-auth/internal/inertia"
 	"github.com/eznix86/nostr-auth/internal/nostr"
 	"github.com/eznix86/nostr-auth/internal/session"
 	gonertia "github.com/romsar/gonertia/v2"
@@ -22,50 +23,51 @@ type contextKey string
 const (
 	authenticatedPubkeyKey contextKey = "authenticated_pubkey"
 	challengeContextKey    contextKey = "challenge_context"
+
+	CSRFCookieName = "nostr_auth_csrf"
 )
 
 type ChallengeContext struct {
-	SessionID string
-	Challenge string
+	Challenge   string
+	IntendedURL string
 }
 
-type Context struct {
-	Config        config.Config
-	Log           zerolog.Logger
-	Account       *account.Cookie
-	Authz         *authorization.Policy
-	Challenge     *challenge.Store
-	Cookie        *cookie.Jar
-	CSRF          *csrf.Guard
-	Inertia       *appinertia.App
-	NostrAccounts *nostr.Accounts
-	NostrVerify   *nostr.Verify
-	Session       *session.Signer
+type Handler struct {
+	Config          config.Config
+	Log             zerolog.Logger
+	Cookie          *cookie.Jar
+	Account         *account.Cookie
+	Authz           *authorization.Policy
+	Inertia         *inertia.Inertia
+	Nostr           *nostr.Client
+	Session         *session.Signer
+	FlashMiddleware func(http.Handler) http.Handler
 }
 
-func (h *Context) Text(w http.ResponseWriter, status int, body string) {
+func (h *Handler) Text(w http.ResponseWriter, status int, body string) {
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(body))
 }
 
-func (h *Context) Render(w http.ResponseWriter, r *http.Request, component string, props gonertia.Props) error {
+func (h *Handler) Render(w http.ResponseWriter, r *http.Request, component string, props gonertia.Props) error {
 	return h.Inertia.Render(w, r, component, props)
 }
 
-func (h *Context) Redirect(w http.ResponseWriter, r *http.Request, target string, status int) {
+func (h *Handler) Redirect(w http.ResponseWriter, r *http.Request, target string, status int) {
 	h.Inertia.Redirect(w, r, target, status)
 }
 
-func (h *Context) AuthError(w http.ResponseWriter, r *http.Request, code string) {
-	http.Redirect(w, r, "/?auth_error="+code, http.StatusSeeOther)
+func (h *Handler) AuthError(w http.ResponseWriter, r *http.Request, code string) {
+	ctx := gonertia.SetFlash(r.Context(), gonertia.Flash{"error": code})
+	h.Inertia.Redirect(w, r.WithContext(ctx), "/", http.StatusSeeOther)
 }
 
-func (h *Context) Fail(w http.ResponseWriter, err error, message string) {
+func (h *Handler) Fail(w http.ResponseWriter, err error, message string) {
 	h.Log.Error().Err(err).Msg(message)
 	http.Error(w, "internal server error", http.StatusInternalServerError)
 }
 
-func (h *Context) AuthenticatedPubkey(r *http.Request) string {
+func (h *Handler) AuthenticatedPubkey(r *http.Request) string {
 	claims, ok := h.Claims(r)
 	if !ok {
 		return ""
@@ -74,7 +76,7 @@ func (h *Context) AuthenticatedPubkey(r *http.Request) string {
 	return claims.PubKey
 }
 
-func (h *Context) Claims(r *http.Request) (*session.Claims, bool) {
+func (h *Handler) Claims(r *http.Request) (*session.Claims, bool) {
 	token := h.Cookie.Value(r, session.CookieName)
 	if token == "" {
 		return nil, false
@@ -88,7 +90,7 @@ func (h *Context) Claims(r *http.Request) (*session.Claims, bool) {
 	return claims, true
 }
 
-func (h *Context) SetAuth(w http.ResponseWriter, pubkey string) bool {
+func (h *Handler) SetAuth(w http.ResponseWriter, pubkey string) bool {
 	token, err := h.Session.Sign(pubkey)
 	if err != nil {
 		return false
@@ -98,11 +100,11 @@ func (h *Context) SetAuth(w http.ResponseWriter, pubkey string) bool {
 	return true
 }
 
-func (h *Context) ClearAuth(w http.ResponseWriter) {
+func (h *Handler) ClearAuth(w http.ResponseWriter) {
 	h.Cookie.Clear(w, session.CookieName)
 }
 
-func (h *Context) RefreshAuth(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) RefreshAuth(w http.ResponseWriter, r *http.Request) bool {
 	claims, ok := h.Claims(r)
 	if !ok {
 		return false
@@ -111,42 +113,67 @@ func (h *Context) RefreshAuth(w http.ResponseWriter, r *http.Request) bool {
 	return h.SetAuth(w, claims.PubKey)
 }
 
-func (h *Context) EnsureChallengeSession(w http.ResponseWriter, r *http.Request) (string, error) {
-	if sessionID := h.Cookie.Value(r, challenge.SessionCookieName); sessionID != "" {
-		return sessionID, nil
+func (h *Handler) SetIntendedURL(w http.ResponseWriter, intendedURL string) bool {
+	if intendedURL == "" {
+		h.Cookie.Clear(w, session.IntendedURLCookieName)
+		return true
 	}
 
-	sessionID, err := challenge.NewSessionID()
+	token, err := h.Session.SignIntendedURL(intendedURL, h.Config.ChallengeTTL)
+	if err != nil {
+		return false
+	}
+
+	h.Cookie.Set(w, session.IntendedURLCookieName, token, 0)
+	return true
+}
+
+func (h *Handler) IntendedURL(r *http.Request) string {
+	token := h.Cookie.Value(r, session.IntendedURLCookieName)
+	if token == "" {
+		return ""
+	}
+
+	intendedURL, err := h.Session.VerifyIntendedURL(token)
+	if err != nil {
+		return ""
+	}
+
+	return intendedURL
+}
+
+func (h *Handler) ClearIntendedURL(w http.ResponseWriter) {
+	h.Cookie.Clear(w, session.IntendedURLCookieName)
+}
+
+func (h *Handler) IssueChallenge(w http.ResponseWriter, intendedURL string) (string, error) {
+	token, err := randomHex(16)
 	if err != nil {
 		return "", err
 	}
 
-	h.Cookie.Set(w, challenge.SessionCookieName, sessionID, 0)
-	return sessionID, nil
-}
-
-func (h *Context) CurrentOrIssueChallenge(sessionID string) (challenge.Value, error) {
-	current, err := h.Challenge.Current(sessionID)
-	if err == nil && current.Token != "" {
-		return current, nil
+	signed, err := h.Session.SignChallenge(token, intendedURL, h.Config.ChallengeTTL)
+	if err != nil {
+		return "", err
 	}
 
-	return h.Challenge.Issue(sessionID)
+	h.Cookie.Set(w, session.ChallengeCookieName, signed, 0)
+	return token, nil
 }
 
-func (h *Context) Profile(r *http.Request) *nostr.Profile {
+func (h *Handler) Profile(r *http.Request) *nostr.Profile {
 	return h.Account.Read(r)
 }
 
-func (h *Context) FetchProfile(ctx context.Context, pubkey string) (*nostr.Profile, error) {
-	return h.NostrAccounts.FetchProfile(ctx, pubkey)
+func (h *Handler) FetchProfile(ctx context.Context, pubkey string) (*nostr.Profile, error) {
+	return h.Nostr.FetchProfile(ctx, pubkey)
 }
 
-func (h *Context) ProfileProp(w http.ResponseWriter, r *http.Request, _ string) any {
+func (h *Handler) ProfileProp(w http.ResponseWriter, r *http.Request, _ string) any {
 	pubkey := AuthenticatedPubkeyFromContext(r)
 	currentProfile := h.Profile(r)
 	if currentProfile == nil && pubkey != "" {
-		cachedProfile := h.NostrAccounts.CachedProfile(pubkey)
+		cachedProfile := h.Nostr.CachedProfile(pubkey)
 		if cachedProfile != nil {
 			currentProfile = cachedProfile
 			h.Account.Set(w, cachedProfile)
@@ -172,7 +199,7 @@ func (h *Context) ProfileProp(w http.ResponseWriter, r *http.Request, _ string) 
 	return profile
 }
 
-func (h *Context) Allowed(host, pubkey, nip05 string) bool {
+func (h *Handler) Allowed(host, pubkey, nip05 string) bool {
 	if h.Authz == nil {
 		return false
 	}
@@ -180,7 +207,7 @@ func (h *Context) Allowed(host, pubkey, nip05 string) bool {
 	return h.Authz.Allowed(host, pubkey, nip05)
 }
 
-func (h *Context) Groups(host, pubkey, nip05 string) []string {
+func (h *Handler) Groups(host, pubkey, nip05 string) []string {
 	if h.Authz == nil {
 		return nil
 	}
@@ -188,7 +215,38 @@ func (h *Context) Groups(host, pubkey, nip05 string) []string {
 	return h.Authz.Groups(host, pubkey, nip05)
 }
 
-func (h *Context) WithAuthenticatedPubkey(next http.Handler) http.Handler {
+func (h *Handler) ensureCSRF(w http.ResponseWriter, r *http.Request) (string, error) {
+	if token := h.Cookie.Value(r, CSRFCookieName); token != "" {
+		return token, nil
+	}
+
+	token, err := randomHex(16)
+	if err != nil {
+		return "", err
+	}
+
+	h.Cookie.Set(w, CSRFCookieName, token, 0)
+	return token, nil
+}
+
+func (h *Handler) validCSRF(r *http.Request, token string) bool {
+	if token == "" {
+		return false
+	}
+
+	cookieValue := h.Cookie.Value(r, CSRFCookieName)
+	if cookieValue == "" {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare([]byte(cookieValue), []byte(token)) == 1
+}
+
+func (h *Handler) clearCSRF(w http.ResponseWriter) {
+	h.Cookie.Clear(w, CSRFCookieName)
+}
+
+func (h *Handler) WithAuthenticatedPubkey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pubkey := h.AuthenticatedPubkey(r)
 		if pubkey != "" {
@@ -200,9 +258,9 @@ func (h *Context) WithAuthenticatedPubkey(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Context) RequireCSRF(next http.Handler) http.Handler {
+func (h *Handler) RequireCSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.CSRF.Valid(r, r.Header.Get("X-CSRF-Token")) {
+		if !h.validCSRF(r, r.Header.Get("X-CSRF-Token")) {
 			h.AuthError(w, r, AuthErrorInvalidCSRF)
 			return
 		}
@@ -211,23 +269,23 @@ func (h *Context) RequireCSRF(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Context) WithChallenge(next http.Handler) http.Handler {
+func (h *Handler) WithChallenge(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sessionID := h.Cookie.Value(r, challenge.SessionCookieName)
-		if sessionID == "" {
+		signed := h.Cookie.Value(r, session.ChallengeCookieName)
+		if signed == "" {
 			h.AuthError(w, r, AuthErrorMissingChallenge)
 			return
 		}
 
-		current, err := h.Challenge.Current(sessionID)
+		claims, err := h.Session.VerifyChallenge(signed)
 		if err != nil {
 			h.AuthError(w, r, AuthErrorChallengeUnavailable)
 			return
 		}
 
 		ctx := context.WithValue(r.Context(), challengeContextKey, ChallengeContext{
-			SessionID: sessionID,
-			Challenge: current.Token,
+			Challenge:   claims.Token,
+			IntendedURL: claims.IntendedURL,
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -240,9 +298,18 @@ func AuthenticatedPubkeyFromContext(r *http.Request) string {
 
 func ChallengeFromContext(r *http.Request) (*ChallengeContext, bool) {
 	challengeContext, ok := r.Context().Value(challengeContextKey).(ChallengeContext)
-	if !ok || challengeContext.SessionID == "" || challengeContext.Challenge == "" {
+	if !ok || challengeContext.Challenge == "" {
 		return nil, false
 	}
 
 	return &challengeContext, true
+}
+
+func randomHex(size int) (string, error) {
+	buf := make([]byte, size)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(buf), nil
 }

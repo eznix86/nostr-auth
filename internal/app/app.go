@@ -4,15 +4,15 @@ import (
 	"github.com/eznix86/nostr-auth/internal/account"
 	"github.com/eznix86/nostr-auth/internal/appconfig"
 	"github.com/eznix86/nostr-auth/internal/authorization"
-	"github.com/eznix86/nostr-auth/internal/challenge"
 	"github.com/eznix86/nostr-auth/internal/config"
 	"github.com/eznix86/nostr-auth/internal/cookie"
-	"github.com/eznix86/nostr-auth/internal/csrf"
+	"github.com/eznix86/nostr-auth/internal/flash"
 	"github.com/eznix86/nostr-auth/internal/inertia"
 	"github.com/eznix86/nostr-auth/internal/logger"
 	"github.com/eznix86/nostr-auth/internal/nostr"
 	"github.com/eznix86/nostr-auth/internal/server"
 	"github.com/eznix86/nostr-auth/internal/session"
+	gonertia "github.com/romsar/gonertia/v2"
 	"github.com/rs/zerolog"
 )
 
@@ -26,7 +26,9 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 		return nil, err
 	}
 
-	inertiaApp, err := inertia.New(cfg)
+	jar := cookie.NewJar(cfg.CookieDomain, cfg.CookieSecure)
+
+	inertiaApp, err := inertia.New(cfg, gonertia.WithFlashProvider(&flash.Provider{}))
 	if err != nil {
 		return nil, err
 	}
@@ -39,28 +41,19 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 	inertiaApp.ShareProp("branding", appConfig.Branding)
 	inertiaApp.ShareTemplateData("backgroundAsset", appConfig.Branding.BackgroundAsset())
 
-	jar := cookie.NewJar(cfg.CookieDomain, cfg.CookieSecure)
-	h := &server.Context{
-		Config:        cfg,
-		Log:           log,
-		Account:       account.NewCookie(jar),
-		Authz:         policy,
-		Challenge:     challenge.NewStore(cfg.ChallengeTTL),
-		Cookie:        jar,
-		CSRF:          csrf.NewGuard(jar),
-		Inertia:       inertiaApp,
-		NostrAccounts: nostr.NewAccounts(server.DefaultRelays, cfg.ProfileFetchTimeout, cfg.ProfileCacheTTL),
-		NostrVerify:   nostr.NewVerify(),
-		Session:       session.NewSigner(cfg.AppSecret, cfg.SessionTTL),
+	h := &server.Handler{
+		Config:      cfg,
+		Log:         log,
+		Cookie:      jar,
+		Account:     account.NewCookie(jar),
+		Authz:       policy,
+		Inertia:     inertiaApp,
+		Nostr:       nostr.NewClient(server.DefaultRelays, cfg.ProfileFetchTimeout, cfg.ProfileCacheTTL),
+		Session:     session.NewSigner(cfg.AppSecret, cfg.SessionTTL),
+		FlashMiddleware: flash.Middleware(jar),
 	}
 
-	app := &server.App{
-		Handlers: h,
-		Auth:     &server.Auth{H: h},
-		Home:     &server.Home{H: h},
-		Logout:   &server.LogoutPage{H: h},
-		Proxy:    &server.Proxy{H: h},
-	}
+	app := &server.App{Handler: h}
 
 	router, err := server.NewRouter(app)
 	if err != nil {

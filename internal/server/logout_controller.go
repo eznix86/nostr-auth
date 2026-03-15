@@ -3,24 +3,32 @@ package server
 import (
 	"net/http"
 
+	"github.com/eznix86/nostr-auth/internal/session"
 	gonertia "github.com/romsar/gonertia/v2"
 )
 
-type LogoutPage struct{ H *Context }
-
-func (l *LogoutPage) Index(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) LogoutIndex(w http.ResponseWriter, r *http.Request) {
 	pubkey := AuthenticatedPubkeyFromContext(r)
 	if pubkey == "" {
-		l.H.Redirect(w, r, "/", http.StatusSeeOther)
+		h.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 
-	err := l.H.Render(w, r, "Logout", gonertia.Props{
-		"title":               l.H.Config.AppName,
+	err := h.Render(w, r, "Logout", gonertia.Props{
+		"title":               h.Config.AppName,
 		"authenticatedPubkey": pubkey,
-		"profile":             l.H.ProfileProp(w, r, "logout.index"),
+		"profile":             h.ProfileProp(w, r, "logout.index"),
 	})
 	if err != nil {
-		l.H.Fail(w, err, "failed to render logout page")
+		h.Fail(w, err, "failed to render logout page")
 	}
+}
+
+func (h *Handler) LogoutSubmit(w http.ResponseWriter, r *http.Request) {
+	h.ClearAuth(w)
+	h.Cookie.Clear(w, session.ChallengeCookieName)
+	h.ClearIntendedURL(w)
+	h.clearCSRF(w)
+	h.Account.Clear(w)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

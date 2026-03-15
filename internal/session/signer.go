@@ -11,13 +11,23 @@ import (
 	"time"
 )
 
-const CookieName = "nostr_auth_session"
+const (
+	CookieName            = "nostr_auth_session"
+	ChallengeCookieName   = "nostr_auth_challenge"
+	IntendedURLCookieName = "nostr_auth_intended_url"
+)
 
 var ErrInvalid = errors.New("invalid session")
 
 type Claims struct {
 	PubKey    string `json:"pubkey"`
 	ExpiresAt int64  `json:"expires_at"`
+}
+
+type ChallengeClaims struct {
+	Token       string `json:"token"`
+	IntendedURL string `json:"intended_url,omitempty"`
+	ExpiresAt   int64  `json:"expires_at"`
 }
 
 type Signer struct {
@@ -31,7 +41,80 @@ func NewSigner(secret string, ttl time.Duration) *Signer {
 
 func (s *Signer) Sign(pubkey string) (string, error) {
 	claims := Claims{PubKey: pubkey, ExpiresAt: time.Now().Add(s.ttl).Unix()}
-	payload, err := json.Marshal(claims)
+	return s.signJSON(claims)
+}
+
+func (s *Signer) Verify(token string) (*Claims, error) {
+	payloadJSON, err := s.verifyAndDecode(token)
+	if err != nil {
+		return nil, err
+	}
+
+	var claims Claims
+	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
+		return nil, ErrInvalid
+	}
+
+	if claims.PubKey == "" || time.Now().Unix() > claims.ExpiresAt {
+		return nil, ErrInvalid
+	}
+
+	return &claims, nil
+}
+
+func (s *Signer) SignChallenge(token, intendedURL string, ttl time.Duration) (string, error) {
+	claims := ChallengeClaims{Token: token, IntendedURL: intendedURL, ExpiresAt: time.Now().Add(ttl).Unix()}
+	return s.signJSON(claims)
+}
+
+func (s *Signer) VerifyChallenge(signed string) (*ChallengeClaims, error) {
+	payloadJSON, err := s.verifyAndDecode(signed)
+	if err != nil {
+		return nil, err
+	}
+
+	var claims ChallengeClaims
+	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
+		return nil, ErrInvalid
+	}
+
+	if claims.Token == "" || time.Now().Unix() > claims.ExpiresAt {
+		return nil, ErrInvalid
+	}
+
+	return &claims, nil
+}
+
+type intendedURLClaims struct {
+	IntendedURL string `json:"intended_url"`
+	ExpiresAt   int64  `json:"expires_at"`
+}
+
+func (s *Signer) SignIntendedURL(intendedURL string, ttl time.Duration) (string, error) {
+	claims := intendedURLClaims{IntendedURL: intendedURL, ExpiresAt: time.Now().Add(ttl).Unix()}
+	return s.signJSON(claims)
+}
+
+func (s *Signer) VerifyIntendedURL(signed string) (string, error) {
+	payloadJSON, err := s.verifyAndDecode(signed)
+	if err != nil {
+		return "", err
+	}
+
+	var claims intendedURLClaims
+	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
+		return "", ErrInvalid
+	}
+
+	if claims.IntendedURL == "" || time.Now().Unix() > claims.ExpiresAt {
+		return "", ErrInvalid
+	}
+
+	return claims.IntendedURL, nil
+}
+
+func (s *Signer) signJSON(v any) (string, error) {
+	payload, err := json.Marshal(v)
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +124,7 @@ func (s *Signer) Sign(pubkey string) (string, error) {
 	return fmt.Sprintf("%s.%s", encodedPayload, encodedSignature), nil
 }
 
-func (s *Signer) Verify(token string) (*Claims, error) {
+func (s *Signer) verifyAndDecode(token string) ([]byte, error) {
 	payload, signature, ok := splitToken(token)
 	if !ok {
 		return nil, ErrInvalid
@@ -61,16 +144,7 @@ func (s *Signer) Verify(token string) (*Claims, error) {
 		return nil, ErrInvalid
 	}
 
-	var claims Claims
-	if err := json.Unmarshal(payloadJSON, &claims); err != nil {
-		return nil, ErrInvalid
-	}
-
-	if claims.PubKey == "" || time.Now().Unix() > claims.ExpiresAt {
-		return nil, ErrInvalid
-	}
-
-	return &claims, nil
+	return payloadJSON, nil
 }
 
 func (s *Signer) signature(payload string) []byte {
