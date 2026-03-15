@@ -6,7 +6,6 @@ import (
 
 	nostrlib "fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/nip19"
-	localnostr "github.com/eznix86/nostr-auth/internal/nostr"
 )
 
 func ParseAllowedPubKey(value string) (*nostrlib.PubKey, error) {
@@ -75,7 +74,7 @@ func verifyEventIntegrity(evt nostrlib.Event) error {
 func verifyChallengeTag(evt nostrlib.Event, expectedChallenge string) error {
 	challengeTag := evt.Tags.Find("challenge")
 	if len(challengeTag) < 2 || challengeTag[1] != expectedChallenge {
-		return localnostr.ErrChallengeMismatch
+		return errors.New("challenge mismatch")
 	}
 
 	return nil

@@ -600,7 +600,7 @@ func profileCookie(t *testing.T, app *serverpkg.App, nip05 string) *http.Cookie 
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	app.Handlers.Account.Set(recorder, &nostr.Profile{NIP05: nip05})
+	app.Handler.Account.Set(recorder, &nostr.Profile{NIP05: nip05})
 
 	for _, cookie := range recorder.Result().Cookies() {
 		if cookie.Name == account.ProfileCookieName {

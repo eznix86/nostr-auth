@@ -5,7 +5,6 @@ import (
 
 	nostrlib "fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/nip19"
-	localnostr "github.com/eznix86/nostr-auth/internal/nostr"
 )
 
 func TestParseAllowedPubKeyFromNpub(t *testing.T) {
@@ -54,7 +53,7 @@ func TestVerifyAuthEventRejectsWrongChallenge(t *testing.T) {
 		t.Fatalf("Sign() error = %v", err)
 	}
 
-	if err := VerifyAuthEvent(evt, "challenge-456", "127.0.0.1:3000", nil); err != localnostr.ErrChallengeMismatch {
-		t.Fatalf("VerifyAuthEvent() error = %v, want %v", err, localnostr.ErrChallengeMismatch)
+	if err := VerifyAuthEvent(evt, "challenge-456", "127.0.0.1:3000", nil); err == nil {
+		t.Fatal("VerifyAuthEvent() expected error for wrong challenge, got nil")
 	}
 }

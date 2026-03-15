@@ -6,16 +6,9 @@ import (
 
 	nostrlib "fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/nip19"
-	challengepkg "github.com/eznix86/nostr-auth/internal/challenge"
 )
 
-type Verify struct{}
-
-func NewVerify() *Verify {
-	return &Verify{}
-}
-
-func (v *Verify) Event(evt nostrlib.Event, expectedChallenge, expectedRelay string) error {
+func VerifyAuthEvent(evt nostrlib.Event, expectedChallenge, expectedRelay string) error {
 	if !evt.CheckID() {
 		return errors.New("invalid event id")
 	}
@@ -30,7 +23,7 @@ func (v *Verify) Event(evt nostrlib.Event, expectedChallenge, expectedRelay stri
 
 	challengeTag := evt.Tags.Find("challenge")
 	if len(challengeTag) < 2 || challengeTag[1] != expectedChallenge {
-		return challengepkg.ErrMismatch
+		return errors.New("challenge mismatch")
 	}
 
 	relayTag := evt.Tags.Find("relay")
