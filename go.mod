@@ -39,4 +39,4 @@ require (
 	golang.org/x/sys v0.35.0 // indirect
 )
 
-replace github.com/romsar/gonertia/v2 => github.com/eznix86/gonertia/v2 v2.0.0-20260310183947-80cd6bba5753
+replace github.com/romsar/gonertia/v2 => github.com/eznix86/gonertia/v2 v2.0.0-20260315184419-0ddebb83833e
