@@ -36,8 +36,14 @@ func NewRouter(app *App) (chi.Router, error) {
 	}))
 	r.HandleFunc("/auth/check", h.ProxyCheck)
 	r.HandleFunc("/auth/check/*", h.ProxyCheck)
-	r.Handle("/public/*", http.StripPrefix("/public/", http.FileServer(http.FS(publicAssets))))
-	r.Handle("/build/*", http.StripPrefix("/build/", http.FileServer(http.FS(builtAssets))))
+	r.With(Gzip(), StaticHeaders(publicCacheControl)).Handle(
+		"/public/*",
+		http.StripPrefix("/public/", http.FileServer(http.FS(publicAssets))),
+	)
+	r.With(Gzip(), StaticHeaders(buildCacheControl)).Handle(
+		"/build/*",
+		http.StripPrefix("/build/", http.FileServer(http.FS(builtAssets))),
+	)
 
 	r.Group(func(r chi.Router) {
 		r.Use(h.FlashMiddleware)

@@ -587,6 +587,34 @@ func TestNewAppIgnoresMissingConfigFile(t *testing.T) {
 	}
 }
 
+func TestBuildAssetsSetImmutableCacheControl(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/build/assets/app-DuvHv2Mf.js", nil)
+
+	app.Router.ServeHTTP(recorder, req)
+
+	if got := recorder.Header().Get("Cache-Control"); got != serverpkg.BuildCacheControl() {
+		t.Fatalf("Cache-Control = %q, want %q", got, serverpkg.BuildCacheControl())
+	}
+}
+
+func TestBuildAssetsSupportGzip(t *testing.T) {
+	app := newTestApp(t)
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/build/assets/app-DuvHv2Mf.js", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	app.Router.ServeHTTP(recorder, req)
+
+	if got := recorder.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("Content-Encoding = %q, want %q", got, "gzip")
+	}
+	if got := recorder.Header().Get("Vary"); !strings.Contains(got, "Accept-Encoding") {
+		t.Fatalf("Vary = %q, want to contain %q", got, "Accept-Encoding")
+	}
+}
+
 func newTestApp(t *testing.T) *serverpkg.App {
 	t.Helper()
 
