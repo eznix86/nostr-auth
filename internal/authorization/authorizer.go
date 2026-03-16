@@ -49,19 +49,11 @@ func (a *Authorizer) Allowed(host, pubkey string) bool {
 		return false
 	}
 
-	if _, ok := app.PubKeys[strings.ToLower(pubkey)]; ok {
-		return true
-	}
-
-	if nip05 == "" {
-		return false
-	}
-
-	_, ok = app.NIP05s[normalizeNIP05(nip05)]
+	_, ok = app.PubKeys[strings.ToLower(pubkey)]
 	return ok
 }
 
-func (a *Authorizer) Groups(host, pubkey, nip05 string) []string {
+func (a *Authorizer) Groups(host, pubkey string) []string {
 	if a == nil {
 		return nil
 	}
@@ -72,17 +64,10 @@ func (a *Authorizer) Groups(host, pubkey, nip05 string) []string {
 	}
 
 	normalizedPubkey := strings.ToLower(pubkey)
-	normalizedNIP05 := normalizeNIP05(nip05)
 	matched := make([]string, 0, len(app.Groups))
 	for groupName, principals := range app.Groups {
 		if _, ok := principals.PubKeys[normalizedPubkey]; ok {
 			matched = append(matched, groupName)
-			continue
-		}
-		if normalizedNIP05 != "" {
-			if _, ok := principals.NIP05s[normalizedNIP05]; ok {
-				matched = append(matched, groupName)
-			}
 		}
 	}
 

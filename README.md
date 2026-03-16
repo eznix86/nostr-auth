@@ -13,9 +13,10 @@ Existing authentication solutions are powerful and widely adopted in the web2 wo
 - Adding Nostr authentication to existing web applications
 - Protecting internal or private resources
 - Enabling identity-based access control for Nostr users
+- Protecting multiple configured upstream domains behind a single auth app
 
 > [!NOTE]
-> This version only supports cookie-based authentication, meaning it works within a single primary domain and its subdomains (e.g. `example.com` and `app.example.com`). Cross-domain authentication is not currently supported (`anotherdomain.com`).
+> This version uses cookie-based authentication for the auth app itself, but it can still protect multiple configured upstream domains through the forward-auth flow. Redirect targets are restricted to domains configured under `auth.apps`.
 
 ## Requirements
 
@@ -50,7 +51,6 @@ Should be available on http://localhost:3000
     "enabled": true,
     "groups": {
       "admins": [
-        "alice@example.com",
         "npub1..."
       ]
     },
@@ -79,14 +79,15 @@ Should be available on http://localhost:3000
 ```
 
 - `auth.enabled` turns authorization on or off
-- `auth.groups` defines reusable user groups with NIP-05 identifiers, `npub`, or nested `group:<name>` references
+- `auth.groups` defines reusable user groups with `npub`, hex public keys, or nested `group:<name>` references
 - `auth.apps` defines which domains are protected and which users or groups can access them
+- `auth.apps.*.config.domain` or `auth.apps.*.config.domains` also define the allowed post-login redirect targets
 - `branding.background.source.type` currently supports `preset`
 - `branding.background.source.variant` can be `canyon-falls` (default), `fields-road`, `mountain-valley`, or `storm-valley`
 - if `branding` is omitted, the app falls back to `canyon-falls`
 
 > [!IMPORTANT]
-> Prefer `npub` values for real access control. An `npub` identifies a specific public key, so it stays stable over time. A NIP-05 identifier is easier to read and useful in testing or development, but its ownership can change, which may unintentionally change who matches a rule.
+> Authorization is pubkey-based. NIP-05 values are not supported in authorization rules and are ignored with a warning because they are not a safe basis for access control.
 
 ## Testing Demo
 

@@ -154,12 +154,37 @@ func TestChallengeEndpointReturnsToken(t *testing.T) {
 }
 
 func TestHomeStoresIntendedURLAndExposesItInProps(t *testing.T) {
-	app := newTestApp(t)
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"auth": {
+			"enabled": true,
+			"apps": {
+				"default": {
+					"config": {"domain": "demo.local"}
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "canyon-falls"}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	app := newTestAppWithConfig(t, config.Config{
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   configPath,
+	})
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/?redirect=http://demo.local/private", nil)
 	req.Header.Set("X-Inertia", "true")
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -197,7 +222,33 @@ func TestHomeStoresIntendedURLAndExposesItInProps(t *testing.T) {
 
 func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	secretKey := nostrlib.Generate()
-	app := newTestApp(t)
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"auth": {
+			"enabled": true,
+			"apps": {
+				"default": {
+					"config": {"domain": "private"},
+					"users": ["`+secretKey.Public().Hex()+`"]
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "fields-road"}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	app := newTestAppWithConfig(t, config.Config{
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   configPath,
+	})
 
 	challengeToken, signedChallenge, err := issueChallengeForTest(app, "/private", 5*time.Minute)
 	if err != nil {
@@ -218,7 +269,7 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 		t.Fatalf("issueCsrfForTest() error = %v", err)
 	}
 
-	body, err := json.Marshal(serverpkg.VerifyChallengeRequest{Event: evt.String()})
+	body, err := json.Marshal(controller.VerifyChallengeRequest{Event: evt.String()})
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
@@ -227,10 +278,10 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/auth/verify", bytes.NewReader(body))
 	req.Host = "127.0.0.1:3000"
 	req.AddCookie(&http.Cookie{Name: session.ChallengeCookieName, Value: signedChallenge})
-	req.AddCookie(&http.Cookie{Name: serverpkg.CSRFCookieName, Value: csrfToken})
+	req.AddCookie(&http.Cookie{Name: controller.CSRFCookieName, Value: csrfToken})
 	req.Header.Set("X-CSRF-Token", csrfToken)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
@@ -268,7 +319,7 @@ func TestVerifyChallengeSetsSignedSessionAndClearsChallenge(t *testing.T) {
 
 	verifyReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	verifyReq.AddCookie(sessionCookie)
-	if got := app.Handler.AuthenticatedPubkey(verifyReq); got != secretKey.Public().Hex() {
+	if got := app.Controller.AuthenticatedPubkey(verifyReq); got != secretKey.Public().Hex() {
 		t.Fatalf("authenticated pubkey = %q, want %q", got, secretKey.Public().Hex())
 	}
 }
@@ -314,10 +365,10 @@ func TestLogoutClearsSessionAndChallengeCookies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issueCsrfForTest() error = %v", err)
 	}
-	req.AddCookie(&http.Cookie{Name: serverpkg.CSRFCookieName, Value: csrfToken})
+	req.AddCookie(&http.Cookie{Name: controller.CSRFCookieName, Value: csrfToken})
 	req.Header.Set("X-CSRF-Token", csrfToken)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
@@ -349,10 +400,10 @@ func TestVerifyChallengeRejectsInvalidCSRF(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/auth/verify", bytes.NewReader([]byte(`{"csrfToken":"bad"}`)))
 	req.AddCookie(&http.Cookie{Name: session.ChallengeCookieName, Value: signedChallenge})
-	req.AddCookie(&http.Cookie{Name: serverpkg.CSRFCookieName, Value: "good"})
+	req.AddCookie(&http.Cookie{Name: controller.CSRFCookieName, Value: "good"})
 	req.Header.Set("X-CSRF-Token", "bad")
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
@@ -384,7 +435,7 @@ func TestVerifyChallengeRejectsInvalidCSRF(t *testing.T) {
 	homeReq.Header.Set("X-Inertia", "true")
 	homeReq.AddCookie(flashCookie)
 
-	app.Routes().ServeHTTP(homeRecorder, homeReq)
+	app.Router.ServeHTTP(homeRecorder, homeReq)
 
 	if homeRecorder.Code != http.StatusOK {
 		t.Fatalf("home status = %d, want %d", homeRecorder.Code, http.StatusOK)
@@ -440,7 +491,7 @@ func TestForwardAuthForbiddenWhenAuthorizerRejectsUser(t *testing.T) {
 	req.Header.Set("X-Forwarded-Host", "demo.local")
 	req.AddCookie(authCookie(t, app, rejectedKey.Public().Hex()))
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
@@ -461,7 +512,7 @@ func TestForwardAuthForbiddenWhenConfigFileIsMissing(t *testing.T) {
 	req.Header.Set("X-Forwarded-Host", "demo.local")
 	req.AddCookie(authCookie(t, app, nostrlib.Generate().Public().Hex()))
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)
@@ -476,8 +527,7 @@ func TestForwardAuthSetsGroupHeaders(t *testing.T) {
 		"auth": {
 			"enabled": true,
 			"groups": {
-				"admins": ["`+allowedKey.Public().Hex()+`", "group:staff"],
-				"staff": ["alice@example.com"]
+				"admins": ["`+allowedKey.Public().Hex()+`"]
 			},
 			"apps": {
 				"default": {
@@ -510,16 +560,16 @@ func TestForwardAuthSetsGroupHeaders(t *testing.T) {
 	req.AddCookie(authCookie(t, app, allowedKey.Public().Hex()))
 	req.AddCookie(profileCookie(t, app, "alice@example.com"))
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
-	if got := recorder.Header().Get("X-Forwarded-Groups"); got != "admins,staff" {
-		t.Fatalf("X-Forwarded-Groups = %q, want %q", got, "admins,staff")
+	if got := recorder.Header().Get("X-Forwarded-Groups"); got != "admins" {
+		t.Fatalf("X-Forwarded-Groups = %q, want %q", got, "admins")
 	}
-	if got := recorder.Header().Get("X-Auth-Request-Groups"); got != "admins,staff" {
-		t.Fatalf("X-Auth-Request-Groups = %q, want %q", got, "admins,staff")
+	if got := recorder.Header().Get("X-Auth-Request-Groups"); got != "admins" {
+		t.Fatalf("X-Auth-Request-Groups = %q, want %q", got, "admins")
 	}
 }
 
