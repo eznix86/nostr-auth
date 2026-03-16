@@ -13,7 +13,6 @@ data:
         "enabled": true,
         "groups": {
           "admins": [
-            "replace-me@example.com",
             "npub18us53gzgcc3p8mfmj7nf9kl5ugdkt0d0f9x97uxhc5pn96u2wnass2f0aj",
             "npub1q0xavqd3qm5yutgc3zrux9f35ezjyzmjvew9m3t4vmtq4llht0pqumvmun"
           ]
