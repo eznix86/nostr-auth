@@ -20,7 +20,7 @@ func NewRouter(app *App) (chi.Router, error) {
 		return nil, fmt.Errorf("failed to mount public assets: %w", err)
 	}
 
-	h := app.Handler
+	h := app.Controller
 
 	r := chi.NewRouter()
 	r.Use(h.WithAuthenticatedPubkey)

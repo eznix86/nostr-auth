@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"net/http"
@@ -7,13 +7,15 @@ import (
 )
 
 func (h *Handler) HomeIndex(w http.ResponseWriter, r *http.Request) {
-	intendedURL := SafeRedirect(r.URL.Query().Get("redirect"))
-	if AuthenticatedPubkeyFromContext(r) != "" && intendedURL != "/" {
-		h.Redirect(w, r, intendedURL, http.StatusSeeOther)
-		return
-	}
-	if AuthenticatedPubkeyFromContext(r) != "" {
-		h.Redirect(w, r, "/logout", http.StatusSeeOther)
+	pubkey := AuthenticatedPubkeyFromContext(r)
+	intendedURL := SafeRedirect(r.URL.Query().Get("redirect"), h.Authz)
+	if pubkey != "" {
+		target := "/logout"
+		if intendedURL != "/" {
+			target = intendedURL
+		}
+
+		h.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
 

@@ -48,7 +48,7 @@ func LoadFile(path string) (FileConfig, error) {
 	return cfg, nil
 }
 
-func (a AuthConfig) PolicyConfig() authorization.FileConfig {
+func (a AuthConfig) AuthorizationConfig() authorization.FileConfig {
 	return authorization.FileConfig{
 		Auth:   authorization.AuthSettings{Enabled: a.Enabled},
 		Groups: a.Groups,

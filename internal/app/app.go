@@ -5,6 +5,7 @@ import (
 	"github.com/eznix86/nostr-auth/internal/appconfig"
 	"github.com/eznix86/nostr-auth/internal/authorization"
 	"github.com/eznix86/nostr-auth/internal/config"
+	"github.com/eznix86/nostr-auth/internal/controller"
 	"github.com/eznix86/nostr-auth/internal/cookie"
 	"github.com/eznix86/nostr-auth/internal/flash"
 	"github.com/eznix86/nostr-auth/internal/inertia"
@@ -33,7 +34,7 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 		return nil, err
 	}
 
-	policy, err := authorization.CompilePolicy(appConfig.Auth.PolicyConfig())
+	authorizer, err := authorization.Compile(appConfig.Auth.AuthorizationConfig(), log)
 	if err != nil {
 		return nil, err
 	}
@@ -41,25 +42,25 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 	inertiaApp.ShareProp("branding", appConfig.Branding)
 	inertiaApp.ShareTemplateData("backgroundAsset", appConfig.Branding.BackgroundAsset())
 
-	h := &server.Handler{
-		Config:      cfg,
-		Log:         log,
-		Cookie:      jar,
-		Account:     account.NewCookie(jar),
-		Authz:       policy,
-		Inertia:     inertiaApp,
-		Nostr:       nostr.NewClient(server.DefaultRelays, cfg.ProfileFetchTimeout, cfg.ProfileCacheTTL),
-		Session:     session.NewSigner(cfg.AppSecret, cfg.SessionTTL),
+	h := &controller.Handler{
+		Config:          cfg,
+		Log:             log,
+		Cookie:          jar,
+		Account:         account.NewCookie(jar),
+		Authz:           authorizer,
+		Inertia:         inertiaApp,
+		Nostr:           nostr.NewClient(server.DefaultRelays, cfg.ProfileFetchTimeout, cfg.ProfileCacheTTL),
+		Session:         session.NewSigner(cfg.AppSecret, cfg.SessionTTL),
 		FlashMiddleware: flash.Middleware(jar),
 	}
 
-	app := &server.App{Handler: h}
+	app := &server.App{Controller: h}
 
 	router, err := server.NewRouter(app)
 	if err != nil {
 		return nil, err
 	}
-	app.SetRouter(router)
+	app.Router = router
 
 	return app, nil
 }

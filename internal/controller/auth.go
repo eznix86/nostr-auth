@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"encoding/json"
@@ -6,11 +6,29 @@ import (
 
 	nostrlib "fiatjaf.com/nostr"
 	"github.com/eznix86/nostr-auth/internal/nostr"
-	"github.com/eznix86/nostr-auth/internal/session"
 )
 
 type VerifyChallengeRequest struct {
 	Event string `json:"event"`
+}
+
+func (h *Handler) VerifiedAuthPubkey(r *http.Request, challenge, host string) (string, string) {
+	var payload VerifyChallengeRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		return "", AuthErrorInvalidLogin
+	}
+
+	var evt nostrlib.Event
+	if err := json.Unmarshal([]byte(payload.Event), &evt); err != nil {
+		return "", AuthErrorInvalidLogin
+	}
+
+	if err := nostr.VerifyAuthEvent(evt, challenge, host); err != nil {
+		h.Log.Error().Err(err).Str("handler", "auth.verify").Msg("failed to verify auth event")
+		return "", AuthErrorInvalidLogin
+	}
+
+	return evt.PubKey.Hex(), ""
 }
 
 func (h *Handler) AuthCSRF(w http.ResponseWriter, r *http.Request) {
@@ -41,34 +59,20 @@ func (h *Handler) AuthChallenge(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AuthVerify(w http.ResponseWriter, r *http.Request) {
 	ctx, ok := ChallengeFromContext(r)
 	if !ok {
-		h.AuthError(w, r, AuthErrorMissingChallenge)
+		h.AuthError(w, r, AuthErrorChallengeExpired)
 		return
 	}
 
-	var payload VerifyChallengeRequest
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		h.AuthError(w, r, AuthErrorInvalidPayload)
+	pubkey, authError := h.VerifiedAuthPubkey(r, ctx.Challenge, r.Host)
+	if authError != "" {
+		h.AuthError(w, r, authError)
 		return
 	}
 
-	var evt nostrlib.Event
-	if err := json.Unmarshal([]byte(payload.Event), &evt); err != nil {
-		h.AuthError(w, r, AuthErrorInvalidEvent)
-		return
-	}
-
-	if err := nostr.VerifyAuthEvent(evt, ctx.Challenge, r.Host); err != nil {
-		h.Log.Error().Err(err).Str("handler", "auth.verify").Msg("failed to verify auth event")
-		h.AuthError(w, r, AuthErrorVerificationFailed)
-		return
-	}
-
-	if !h.SetAuth(w, evt.PubKey.Hex()) {
+	if !h.CompleteAuth(w, pubkey) {
 		h.Fail(w, nil, "failed to issue auth session")
 		return
 	}
 
-	h.Cookie.Clear(w, session.ChallengeCookieName)
-	h.ClearIntendedURL(w)
-	h.Redirect(w, r, SafeRedirect(ctx.IntendedURL), http.StatusSeeOther)
+	h.Redirect(w, r, SafeRedirect(ctx.IntendedURL, h.Authz), http.StatusSeeOther)
 }

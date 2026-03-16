@@ -16,6 +16,7 @@ import (
 	"github.com/eznix86/nostr-auth/internal/account"
 	"github.com/eznix86/nostr-auth/internal/app"
 	"github.com/eznix86/nostr-auth/internal/config"
+	controller "github.com/eznix86/nostr-auth/internal/controller"
 	"github.com/eznix86/nostr-auth/internal/nostr"
 	serverpkg "github.com/eznix86/nostr-auth/internal/server"
 	"github.com/eznix86/nostr-auth/internal/session"
@@ -26,7 +27,7 @@ func TestForwardAuthUnauthorizedNonBrowser(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/auth/check", nil)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
@@ -38,7 +39,7 @@ func TestForwardAuthUnauthorizedNonBrowserPost(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/auth/check", nil)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
@@ -54,7 +55,7 @@ func TestForwardAuthRedirectsBrowser(t *testing.T) {
 	req.Header.Set("X-Forwarded-Host", "demo.local")
 	req.Header.Set("X-Forwarded-Uri", "/private")
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusTemporaryRedirect {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusTemporaryRedirect)
@@ -76,7 +77,7 @@ func TestForwardAuthIngressSubrequestReturnsUnauthorized(t *testing.T) {
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("X-Forwarded-Host", "demo.local")
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
@@ -90,7 +91,7 @@ func TestHealthzReturnsServiceUnavailableWhenDraining(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
@@ -102,7 +103,7 @@ func TestCSRFEndpointReturnsToken(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/auth/csrf", nil)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -118,7 +119,7 @@ func TestCSRFEndpointReturnsToken(t *testing.T) {
 	}
 
 	setCookieHeader := strings.Join(recorder.Header().Values("Set-Cookie"), "\n")
-	if !strings.Contains(setCookieHeader, serverpkg.CSRFCookieName+"=") {
+	if !strings.Contains(setCookieHeader, controller.CSRFCookieName+"=") {
 		t.Fatal("expected csrf cookie to be set")
 	}
 }
@@ -128,7 +129,7 @@ func TestChallengeEndpointReturnsToken(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/auth/challenge", nil)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -187,7 +188,7 @@ func TestHomeStoresIntendedURLAndExposesItInProps(t *testing.T) {
 		t.Fatalf("props.intendedUrl = %#v, want %q", got, "http://demo.local/private")
 	}
 
-	if got, err := app.Handler.Session.VerifyIntendedURL(intendedCookie.Value); err != nil {
+	if got, err := app.Controller.Session.VerifyIntendedURL(intendedCookie.Value); err != nil {
 		t.Fatalf("VerifyIntendedURL() error = %v", err)
 	} else if got != "http://demo.local/private" {
 		t.Fatalf("intended url = %q, want %q", got, "http://demo.local/private")
@@ -279,7 +280,7 @@ func TestHomeRedirectsAuthenticatedUsersToLogoutPage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.AddCookie(authCookie(t, app, secretKey.Public().Hex()))
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
@@ -294,7 +295,7 @@ func TestLogoutPageRedirectsGuestsHome(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
 
-	app.Routes().ServeHTTP(recorder, req)
+	app.Router.ServeHTTP(recorder, req)
 
 	if recorder.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
@@ -332,7 +333,7 @@ func TestLogoutClearsSessionAndChallengeCookies(t *testing.T) {
 	if !strings.Contains(setCookieHeader, session.IntendedURLCookieName+"=") {
 		t.Fatal("expected intended url cookie to be cleared")
 	}
-	if !strings.Contains(setCookieHeader, serverpkg.CSRFCookieName+"=") {
+	if !strings.Contains(setCookieHeader, controller.CSRFCookieName+"=") {
 		t.Fatal("expected csrf cookie to be cleared")
 	}
 }
@@ -560,17 +561,17 @@ func newTestAppWithConfig(t *testing.T, cfg config.Config) *serverpkg.App {
 
 func issueChallengeForTest(a *serverpkg.App, intendedURL string, ttl time.Duration) (token, signed string, err error) {
 	token = "test-challenge-token"
-	signed, err = a.Handler.Session.SignChallenge(token, intendedURL, ttl)
+	signed, err = a.Controller.Session.SignChallenge(token, intendedURL, ttl)
 	return
 }
 
 func issueCsrfForTest(a *serverpkg.App) (string, error) {
 	recorder := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/auth/csrf", nil)
-	a.Routes().ServeHTTP(recorder, req)
+	a.Router.ServeHTTP(recorder, req)
 
 	for _, cookie := range recorder.Result().Cookies() {
-		if cookie.Name == serverpkg.CSRFCookieName {
+		if cookie.Name == controller.CSRFCookieName {
 			return cookie.Value, nil
 		}
 	}
@@ -582,7 +583,7 @@ func authCookie(t *testing.T, app *serverpkg.App, pubkey string) *http.Cookie {
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	if !app.Handler.SetAuth(recorder, pubkey) {
+	if !app.Controller.SetAuth(recorder, pubkey) {
 		t.Fatal("expected auth session cookie")
 	}
 
@@ -600,7 +601,7 @@ func profileCookie(t *testing.T, app *serverpkg.App, nip05 string) *http.Cookie 
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	app.Handler.Account.Set(recorder, &nostr.Profile{NIP05: nip05})
+	app.Controller.Account.Set(recorder, &nostr.Profile{NIP05: nip05})
 
 	for _, cookie := range recorder.Result().Cookies() {
 		if cookie.Name == account.ProfileCookieName {

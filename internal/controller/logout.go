@@ -1,9 +1,8 @@
-package server
+package controller
 
 import (
 	"net/http"
 
-	"github.com/eznix86/nostr-auth/internal/session"
 	gonertia "github.com/romsar/gonertia/v2"
 )
 
@@ -25,10 +24,6 @@ func (h *Handler) LogoutIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) LogoutSubmit(w http.ResponseWriter, r *http.Request) {
-	h.ClearAuth(w)
-	h.Cookie.Clear(w, session.ChallengeCookieName)
-	h.ClearIntendedURL(w)
-	h.clearCSRF(w)
-	h.Account.Clear(w)
+	h.Logout(w)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

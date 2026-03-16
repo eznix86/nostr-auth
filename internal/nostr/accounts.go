@@ -58,12 +58,13 @@ func (a *Client) Headers(pubkey string, profile *Profile, groups []string) map[s
 		"X-Auth-Request-User": npub,
 	}
 
+	if len(groups) > 0 {
+		joinedGroups := strings.Join(groups, ",")
+		headers["X-Forwarded-Groups"] = joinedGroups
+		headers["X-Auth-Request-Groups"] = joinedGroups
+	}
+
 	if profile == nil {
-		if len(groups) > 0 {
-			joinedGroups := strings.Join(groups, ",")
-			headers["X-Forwarded-Groups"] = joinedGroups
-			headers["X-Auth-Request-Groups"] = joinedGroups
-		}
 		return headers
 	}
 
@@ -80,11 +81,6 @@ func (a *Client) Headers(pubkey string, profile *Profile, groups []string) map[s
 	if profile.Picture != "" {
 		headers["Remote-User-Picture"] = profile.Picture
 		headers["X-Auth-Request-Picture"] = profile.Picture
-	}
-	if len(groups) > 0 {
-		joinedGroups := strings.Join(groups, ",")
-		headers["X-Forwarded-Groups"] = joinedGroups
-		headers["X-Auth-Request-Groups"] = joinedGroups
 	}
 
 	return headers

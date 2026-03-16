@@ -23,15 +23,15 @@ func main() {
 
 	cfg := config.Load()
 
-	serverApp, err := app.New(cfg)
+	app, err := app.New(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
-	serverApp.SetReady(true)
+	app.SetReady(true)
 
 	httpServer := &http.Server{
 		Addr:    cfg.Address(),
-		Handler: serverApp.Routes(),
+		Handler: app.Router,
 	}
 
 	shutdownDone := make(chan struct{})
@@ -42,7 +42,7 @@ func main() {
 		defer stop()
 
 		<-sigCtx.Done()
-		serverApp.SetReady(false)
+		app.SetReady(false)
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()

@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"io"
@@ -19,28 +19,14 @@ func (h *Handler) ProxyCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile := h.Profile(r)
-	if profile == nil {
-		fetched, err := h.FetchProfile(r.Context(), pubkey)
-		if err != nil {
-			h.Log.Error().Err(err).Str("handler", "proxy.check").Msg("failed to fetch profile")
-		} else if fetched != nil {
-			profile = fetched
-			h.Account.Set(w, profile)
-		}
-	}
-
-	nip05 := ""
-	if profile != nil {
-		nip05 = profile.NIP05
-	}
+	profile := h.LoadProfile(w, r, pubkey)
 	host := ForwardedHost(r)
-	if !h.Allowed(host, pubkey, nip05) {
+	if h.Authz == nil || !h.Authz.Allowed(host, pubkey) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	groups := h.Groups(host, pubkey, nip05)
 
+	groups := h.Authz.Groups(host, pubkey)
 	for key, value := range h.Nostr.Headers(pubkey, profile, groups) {
 		w.Header().Set(key, value)
 	}

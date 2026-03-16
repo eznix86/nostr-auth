@@ -3,21 +3,14 @@ package server
 import (
 	"sync/atomic"
 
+	"github.com/eznix86/nostr-auth/internal/controller"
 	"github.com/go-chi/chi/v5"
 )
 
 type App struct {
-	Handler *Handler
-	router  chi.Router
-	ready   atomic.Bool
-}
-
-func (a *App) Routes() chi.Router {
-	return a.router
-}
-
-func (a *App) SetRouter(router chi.Router) {
-	a.router = router
+	Controller *controller.Handler
+	Router     chi.Router
+	ready      atomic.Bool
 }
 
 func (a *App) SetReady(ready bool) {
