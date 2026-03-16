@@ -10,6 +10,7 @@ import (
 type App struct {
 	Controller *controller.Handler
 	Router     chi.Router
+	Debug      bool
 	ready      atomic.Bool
 }
 

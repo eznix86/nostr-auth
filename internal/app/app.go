@@ -54,7 +54,7 @@ func NewWithLogger(cfg config.Config, log zerolog.Logger) (*server.App, error) {
 		FlashMiddleware: flash.Middleware(jar),
 	}
 
-	app := &server.App{Controller: h}
+	app := &server.App{Controller: h, Debug: cfg.Debug}
 
 	router, err := server.NewRouter(app)
 	if err != nil {

@@ -24,6 +24,7 @@ type Config struct {
 	SessionTTL          time.Duration
 	ProfileFetchTimeout time.Duration
 	ProfileCacheTTL     time.Duration
+	Debug               bool
 }
 
 func (c *Config) Address() string {
@@ -57,6 +58,7 @@ func Load() Config {
 		SessionTTL:          durationValueOr("SESSION_TTL", 168*time.Hour),
 		ProfileFetchTimeout: durationValueOr("NOSTR_PROFILE_FETCH_TIMEOUT", 5*time.Second),
 		ProfileCacheTTL:     durationValueOr("NOSTR_PROFILE_CACHE_TTL", 24*time.Hour),
+		Debug:               boolValueOr("DEBUG", false),
 	}
 }
 
