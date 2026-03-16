@@ -1,14 +1,16 @@
 package authorization
 
 import (
+	"io"
 	"testing"
 
 	nostrlib "fiatjaf.com/nostr"
 	"fiatjaf.com/nostr/nip19"
+	"github.com/rs/zerolog"
 )
 
 func TestCompileDisabledReturnsNil(t *testing.T) {
-	authorizer, err := Compile(FileConfig{})
+	authorizer, err := Compile(FileConfig{}, zerolog.New(io.Discard))
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
@@ -18,7 +20,7 @@ func TestCompileDisabledReturnsNil(t *testing.T) {
 	}
 }
 
-func TestAuthorizerAllowsPubKeyAndNIP05(t *testing.T) {
+func TestAuthorizerAllowsPubKeyAndIgnoresNIP05Entries(t *testing.T) {
 	secretKey := nostrlib.Generate()
 	pubkey := secretKey.Public()
 
@@ -36,23 +38,19 @@ func TestAuthorizerAllowsPubKeyAndNIP05(t *testing.T) {
 				Users:  []string{"group:admins"},
 			},
 		},
-	})
+	}, zerolog.New(io.Discard))
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
 
-	if !authorizer.Allowed("localhost:5500", pubkey.Hex(), "") {
+	if !authorizer.Allowed("localhost:5500", pubkey.Hex()) {
 		t.Fatal("Allowed() should match normalized pubkey on host with port")
 	}
 
-	if !authorizer.Allowed("localhost", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "Alice@Example.com") {
-		t.Fatal("Allowed() should match normalized nip05")
-	}
-
-	if authorizer.Allowed("other.local", pubkey.Hex(), "") {
+	if authorizer.Allowed("other.local", pubkey.Hex()) {
 		t.Fatal("Allowed() should reject unmatched domains")
 	}
-	if authorizer.Allowed("localhost", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "") {
+	if authorizer.Allowed("localhost", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff") {
 		t.Fatal("Allowed() should reject users without a matching principal")
 	}
 }
@@ -65,7 +63,7 @@ func TestAuthorizerGroupsReturnsMatchedGroups(t *testing.T) {
 		Auth: AuthSettings{Enabled: true},
 		Groups: map[string][]string{
 			"admins": {nip19.EncodeNpub(pubkey), "group:staff"},
-			"staff":  {"alice@example.com"},
+			"staff":  {nip19.EncodeNpub(pubkey)},
 		},
 		Apps: map[string]AppConfig{
 			"default": {
@@ -73,12 +71,12 @@ func TestAuthorizerGroupsReturnsMatchedGroups(t *testing.T) {
 				Users:  []string{"group:admins"},
 			},
 		},
-	})
+	}, zerolog.New(io.Discard))
 	if err != nil {
 		t.Fatalf("Compile() error = %v", err)
 	}
 
-	groups := authorizer.Groups("localhost", pubkey.Hex(), "alice@example.com")
+	groups := authorizer.Groups("localhost", pubkey.Hex())
 	if len(groups) != 2 || groups[0] != "admins" || groups[1] != "staff" {
 		t.Fatalf("Groups() = %v, want [admins staff]", groups)
 	}
@@ -93,16 +91,37 @@ func TestCompileRejectsUnknownGroup(t *testing.T) {
 				Users:  []string{"group:missing"},
 			},
 		},
-	})
+	}, zerolog.New(io.Discard))
 	if err == nil {
 		t.Fatal("Compile() should reject unknown groups")
 	}
 }
 
-func TestPolicyRejectsWhenAuthorizerMissing(t *testing.T) {
-	policy := &Policy{}
+func TestAuthorizerRejectsWhenMissing(t *testing.T) {
+	var authorizer *Authorizer
 
-	if policy.Allowed("localhost:8081", "any-pubkey", "") {
+	if authorizer.Allowed("localhost:8081", "any-pubkey") {
 		t.Fatal("Allowed() should return false when auth is disabled")
+	}
+}
+
+func TestAuthorizerAllowsRedirectForConfiguredDomain(t *testing.T) {
+	authorizer, err := Compile(FileConfig{
+		Auth: AuthSettings{Enabled: true},
+		Apps: map[string]AppConfig{
+			"default": {
+				Config: AppMatchConfig{Domain: "demo.local"},
+			},
+		},
+	}, zerolog.New(io.Discard))
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	if !authorizer.AllowsRedirect("https://demo.local/private") {
+		t.Fatal("AllowsRedirect() should allow configured domain")
+	}
+	if authorizer.AllowsRedirect("https://evil.local/private") {
+		t.Fatal("AllowsRedirect() should reject unknown domain")
 	}
 }
