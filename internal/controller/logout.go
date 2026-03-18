@@ -24,6 +24,21 @@ func (h *Handler) LogoutIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) LogoutSubmit(w http.ResponseWriter, r *http.Request) {
+	intendedURL := h.IntendedURL(r)
+	if intendedURL == "" {
+		intendedURL = SafeRedirect(r.URL.Query().Get("redirect"), h.Authz)
+		if intendedURL == "/" {
+			intendedURL = ""
+		}
+	}
+
 	h.Logout(w)
+	if intendedURL != "" {
+		if !h.SetIntendedURL(w, intendedURL) {
+			h.Fail(w, nil, "failed to store intended url")
+			return
+		}
+	}
+
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

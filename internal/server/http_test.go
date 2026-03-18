@@ -341,6 +341,55 @@ func TestHomeRedirectsAuthenticatedUsersToLogoutPage(t *testing.T) {
 	}
 }
 
+func TestHomeRedirectsAuthenticatedUsersToStoredIntendedURL(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"auth": {
+			"enabled": true,
+			"apps": {
+				"default": {
+					"config": {"domain": "demo.local"}
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "canyon-falls"}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	secretKey := nostrlib.Generate()
+	app := newTestAppWithConfig(t, config.Config{
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   configPath,
+	})
+
+	intendedToken, err := app.Controller.Session.SignIntendedURL("http://demo.local/private", 5*time.Minute)
+	if err != nil {
+		t.Fatalf("SignIntendedURL() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(authCookie(t, app, secretKey.Public().Hex()))
+	req.AddCookie(&http.Cookie{Name: session.IntendedURLCookieName, Value: intendedToken})
+
+	app.Router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("Location"); got != "http://demo.local/private" {
+		t.Fatalf("Location = %q, want %q", got, "http://demo.local/private")
+	}
+}
+
 func TestLogoutPageRedirectsGuestsHome(t *testing.T) {
 	app := newTestApp(t)
 	recorder := httptest.NewRecorder()
@@ -386,6 +435,171 @@ func TestLogoutClearsSessionAndChallengeCookies(t *testing.T) {
 	}
 	if !strings.Contains(setCookieHeader, controller.CSRFCookieName+"=") {
 		t.Fatal("expected csrf cookie to be cleared")
+	}
+}
+
+func TestLogoutPreservesExplicitRedirectForNextLogin(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"auth": {
+			"enabled": true,
+			"apps": {
+				"default": {
+					"config": {"domain": "demo.local"}
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "canyon-falls"}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	app := newTestAppWithConfig(t, config.Config{
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   configPath,
+	})
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/logout?redirect=http://demo.local/private", nil)
+	req.AddCookie(authCookie(t, app, nostrlib.Generate().Public().Hex()))
+
+	csrfToken, err := issueCsrfForTest(app)
+	if err != nil {
+		t.Fatalf("issueCsrfForTest() error = %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: controller.CSRFCookieName, Value: csrfToken})
+	req.Header.Set("X-CSRF-Token", csrfToken)
+
+	app.Router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("Location"); got != "/" {
+		t.Fatalf("Location = %q, want %q", got, "/")
+	}
+
+	var intendedCookie *http.Cookie
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == session.IntendedURLCookieName && cookie.MaxAge != -1 {
+			intendedCookie = cookie
+			break
+		}
+	}
+
+	if intendedCookie == nil {
+		t.Fatal("expected intended url cookie to be re-set")
+	}
+
+	if got, err := app.Controller.Session.VerifyIntendedURL(intendedCookie.Value); err != nil {
+		t.Fatalf("VerifyIntendedURL() error = %v", err)
+	} else if got != "http://demo.local/private" {
+		t.Fatalf("intended url = %q, want %q", got, "http://demo.local/private")
+	}
+}
+
+func TestVerifyChallengeRejectedRedirectSetsFlashAndFallsBackHome(t *testing.T) {
+	secretKey := nostrlib.Generate()
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{
+		"auth": {
+			"enabled": true,
+			"apps": {
+				"default": {
+					"config": {"domain": "demo.local"},
+					"users": ["`+secretKey.Public().Hex()+`"]
+				}
+			}
+		},
+		"branding": {
+			"background": {
+				"source": {"type": "preset", "variant": "fields-road"}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	app := newTestAppWithConfig(t, config.Config{
+		AppURL:       "http://localhost:3000",
+		ChallengeTTL: 5 * time.Minute,
+		AppSecret:    "test-secret",
+		SessionTTL:   24 * time.Hour,
+		ConfigFile:   configPath,
+	})
+
+	challengeToken, signedChallenge, err := issueChallengeForTest(app, "http://evil.local/private", 5*time.Minute)
+	if err != nil {
+		t.Fatalf("issueChallengeForTest() error = %v", err)
+	}
+
+	evt := nostrlib.Event{
+		CreatedAt: nostrlib.Now(),
+		Kind:      22242,
+		Tags:      nostrlib.Tags{{"challenge", challengeToken}, {"relay", "127.0.0.1:3000"}},
+	}
+	if err := evt.Sign(secretKey); err != nil {
+		t.Fatalf("Sign() error = %v", err)
+	}
+
+	csrfToken, err := issueCsrfForTest(app)
+	if err != nil {
+		t.Fatalf("issueCsrfForTest() error = %v", err)
+	}
+
+	body, err := json.Marshal(controller.VerifyChallengeRequest{Event: evt.String()})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/verify", bytes.NewReader(body))
+	req.Host = "127.0.0.1:3000"
+	req.AddCookie(&http.Cookie{Name: session.ChallengeCookieName, Value: signedChallenge})
+	req.AddCookie(&http.Cookie{Name: controller.CSRFCookieName, Value: csrfToken})
+	req.Header.Set("X-CSRF-Token", csrfToken)
+
+	app.Router.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("Location"); got != "/" {
+		t.Fatalf("location = %q, want %q", got, "/")
+	}
+
+	var flashCookie *http.Cookie
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == "nostr_auth_flash" {
+			flashCookie = cookie
+			break
+		}
+	}
+
+	if flashCookie == nil {
+		t.Fatal("expected flash cookie in response")
+	}
+
+	homeRecorder := httptest.NewRecorder()
+	homeReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	homeReq.Header.Set("X-Inertia", "true")
+	homeReq.AddCookie(flashCookie)
+	homeReq.AddCookie(authCookie(t, app, secretKey.Public().Hex()))
+
+	app.Router.ServeHTTP(homeRecorder, homeReq)
+
+	if homeRecorder.Code != http.StatusConflict {
+		t.Fatalf("home status = %d, want %d", homeRecorder.Code, http.StatusConflict)
+	}
+	if got := homeRecorder.Header().Get("X-Inertia-Location"); got != "/logout" {
+		t.Fatalf("home location = %q, want %q", got, "/logout")
 	}
 }
 

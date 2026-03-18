@@ -12,7 +12,7 @@ export default function Background({ branding }) {
 
   return (
     <div
-      className="absolute inset-[-2rem] bg-cover bg-center bg-no-repeat"
+      className="absolute -inset-8 bg-cover bg-center bg-no-repeat"
       style={{
         backgroundImage: `linear-gradient(to bottom, rgba(255, 255, 255, 0.02), rgba(7, 10, 8, 0.08)), url(${backgroundUrl})`,
         maskImage: "linear-gradient(to bottom, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.95) 48%, rgba(0, 0, 0, 0.82) 74%, rgba(0, 0, 0, 0.5) 92%, transparent 100%)",

@@ -1,4 +1,4 @@
-import { Head, router, usePage } from "@inertiajs/react";
+import { Head, usePage } from "@inertiajs/react";
 import { useState } from "react";
 import { Check, Copy, Link, QrCode } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
@@ -6,13 +6,15 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { HelperText } from "../components/ui/helper-text";
 import { ProviderButton } from "../components/ui/provider-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { fetchChallenge, fetchCsrfToken, postAuthVerify } from "../lib/auth-client";
 import { clearRemoteSignerSession, connectToBunker, getExtensionSigner, persistRemoteSignerSession, resumeRemoteSignerSession, startRemoteSignerSession } from "../lib/nostr-signer";
 
 export default function Home() {
-  const { flash } = usePage();
-  const { intendedUrl, title } = usePage().props;
+  const { props } = usePage();
+  const { flash, intendedUrl, title } = props;
   const authError = flash?.error || "";
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -41,22 +43,12 @@ export default function Home() {
       });
 
       setStatus("verifying");
-
-      router.post(
-        "/auth/verify",
-        { event: JSON.stringify(event) },
-        {
-          preserveScroll: true,
-          preserveState: false,
-          headers: {
-            "X-CSRF-Token": csrfToken,
-          },
-          onError: () => {
-            setStatus("error");
-            setError("Verification failed.");
-          },
+      postAuthVerify(event, csrfToken, {
+        onError: () => {
+          setStatus("error");
+          setError("Verification failed.");
         },
-      );
+      });
     } catch (err) {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Failed to sign challenge.");
@@ -185,7 +177,8 @@ export default function Home() {
     }
   }
 
-  const helper = error || authError ? error || authError : intendedUrl ? "You will return to your app after signing in." : statusLabel(status);
+  const helper = error || authError || (intendedUrl ? "You will return to your app after signing in." : statusLabel(status));
+  const busy = status === "connecting" || status === "signing" || status === "verifying";
 
   return (
     <>
@@ -198,25 +191,11 @@ export default function Home() {
 
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col items-center justify-center gap-2.5">
-            <ProviderButton
-              title="Sign in with Nostr"
-              icon={<NostrMark />}
-              className="w-full"
-              onClick={signWithExtension}
-              loading={status === "signing" || status === "verifying"}
-              disabled={status === "connecting" || status === "signing" || status === "verifying"}
-            />
-            <ProviderButton
-              title="Sign in with NostrConnect"
-              icon={<QrCode />}
-              className="w-full"
-              onClick={signWithNostrConnect}
-              loading={status === "connecting"}
-              disabled={status === "connecting" || status === "signing" || status === "verifying"}
-            />
+            <ProviderButton title="Sign in with Nostr" icon={<NostrMark />} onClick={signWithExtension} loading={status === "signing" || status === "verifying"} disabled={busy} />
+            <ProviderButton title="Sign in with NostrConnect" icon={<QrCode />} onClick={signWithNostrConnect} loading={status === "connecting"} disabled={busy} />
           </div>
 
-          <p className={`text-center text-sm ${error || authError ? "text-[#ffb4a9] dark:text-[#ffb4a9] light:text-[#a2362c]" : "text-muted-foreground"}`}>{helper}</p>
+          <HelperText error={Boolean(error || authError)}>{helper}</HelperText>
         </CardContent>
       </Card>
 
@@ -250,7 +229,7 @@ export default function Home() {
                     {copyState === "copied" ? "Copied" : "Copy URI"}
                   </Button>
 
-                  <Button className="w-full" onClick={generateNostrConnect} type="button" disabled={status === "connecting" || status === "signing" || status === "verifying"}>
+                  <Button className="w-full" onClick={generateNostrConnect} type="button" disabled={busy}>
                     <QrCode />
                     {connectUri ? "Generate new code" : "Generate code"}
                   </Button>
@@ -273,7 +252,7 @@ export default function Home() {
                   />
                 </div>
 
-                <Button className="w-full" onClick={signWithBunker} type="button" disabled={status === "connecting" || status === "signing" || status === "verifying"}>
+                <Button className="w-full" onClick={signWithBunker} type="button" disabled={busy}>
                   <Link />
                   Connect bunker signer
                 </Button>
@@ -284,11 +263,11 @@ export default function Home() {
           <DialogFooter className="items-stretch sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">{status === "connecting" ? (connectMode === "bunker" ? "Connecting to your bunker signer..." : "Waiting for your NostrConnect signer...") : helper}</p>
             {connectMode === "nostrconnect" ? (
-              <Button variant="outline" onClick={restartNostrConnect} type="button" disabled={status === "connecting" || status === "signing" || status === "verifying"}>
+              <Button variant="outline" onClick={restartNostrConnect} type="button" disabled={busy}>
                 Generate new code
               </Button>
             ) : (
-              <Button variant="outline" onClick={resetNostrConnect} type="button" disabled={status === "connecting" || status === "signing" || status === "verifying"}>
+              <Button variant="outline" onClick={resetNostrConnect} type="button" disabled={busy}>
                 Clear bunker URI
               </Button>
             )}
@@ -297,46 +276,6 @@ export default function Home() {
       </Dialog>
     </>
   );
-}
-
-async function fetchCsrfToken() {
-  const response = await fetch("/auth/csrf", {
-    credentials: "same-origin",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to refresh CSRF token.");
-  }
-
-  const payload = await response.json();
-  if (!payload?.token) {
-    throw new Error("Missing CSRF token.");
-  }
-
-  return payload.token;
-}
-
-async function fetchChallenge() {
-  const response = await fetch("/auth/challenge", {
-    credentials: "same-origin",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to refresh login challenge.");
-  }
-
-  const payload = await response.json();
-  if (!payload?.token || !payload?.relay) {
-    throw new Error("Missing login challenge.");
-  }
-
-  return payload;
 }
 
 function statusLabel(status) {
@@ -353,6 +292,7 @@ function statusLabel(status) {
       return "Ready when you are.";
   }
 }
+
 function NostrMark() {
   return (
     <svg viewBox="0 0 256 256" aria-hidden="true" className="h-[1.1rem] w-[1.1rem]" fill="currentColor">

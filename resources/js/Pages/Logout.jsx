@@ -1,10 +1,15 @@
-import { Deferred, Head, router } from "@inertiajs/react";
+import { Deferred, Head, usePage } from "@inertiajs/react";
 import { useState } from "react";
 
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
+import { HelperText } from "../components/ui/helper-text";
+import { ProfileSummary } from "../components/ui/profile-summary";
+import { fetchCsrfToken, postLogout } from "../lib/auth-client";
 
-export default function Logout({ authenticatedPubkey, profile, title }) {
+export default function Logout() {
+  const { props } = usePage();
+  const { authenticatedPubkey, profile, title } = props;
   const [error, setError] = useState("");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const identityLabel = displayIdentity(profile, authenticatedPubkey);
@@ -14,14 +19,15 @@ export default function Logout({ authenticatedPubkey, profile, title }) {
       setError("");
       setIsLoggingOut(true);
       const csrfToken = await fetchCsrfToken();
-      router.post("/logout", {}, { headers: { "X-CSRF-Token": csrfToken } });
+      postLogout(csrfToken, {
+        onFinish: () => setIsLoggingOut(false),
+        onError: () => setError("Failed to logout."),
+      });
     } catch (err) {
       setIsLoggingOut(false);
       setError(err instanceof Error ? err.message : "Failed to logout.");
     }
   }
-
-  const helper = error || "You can continue now.";
 
   return (
     <>
@@ -34,24 +40,14 @@ export default function Logout({ authenticatedPubkey, profile, title }) {
 
         <CardContent className="flex flex-col gap-4">
           <Deferred data="profile" fallback={<ProfileSkeleton />}>
-            {profile ? (
-              <div className="flex min-w-0 flex-col items-center gap-2">
-                {profile.picture ? <img src={profile.picture} alt={profile.name || profile.display_name} className="h-12 w-12 rounded-full" /> : null}
-                <p className="max-w-full truncate text-sm font-medium" title={identityLabel}>{identityLabel}</p>
-                {profile.nip05 ? <p className="max-w-full truncate text-xs text-muted-foreground" title={profile.nip05}>{profile.nip05}</p> : null}
-              </div>
-            ) : (
-              <div className="min-w-0 text-center text-sm text-muted-foreground">
-                Signed in as <code className="break-all" title={authenticatedPubkey}>{shortPubkey(authenticatedPubkey)}</code>
-              </div>
-            )}
+            <ProfileSummary profile={profile} authenticatedPubkey={authenticatedPubkey} identityLabel={identityLabel} />
           </Deferred>
 
-          <p className={`text-center text-sm ${error ? "text-[#ffb4a9] dark:text-[#ffb4a9] light:text-[#a2362c]" : "text-muted-foreground"}`}>{helper}</p>
+          <HelperText error={Boolean(error)}>{error || "You can continue now."}</HelperText>
         </CardContent>
 
         <CardFooter>
-          <Button className="w-full" variant="outline" onClick={logout} disabled={isLoggingOut}>
+          <Button className="w-full" variant="outline" onClick={logout} disabled={isLoggingOut} loading={isLoggingOut}>
             {isLoggingOut ? "Logging out..." : "Logout"}
           </Button>
         </CardFooter>
@@ -90,25 +86,6 @@ function shortPubkey(pubkey) {
   return `${pubkey.slice(0, 14)}...${pubkey.slice(-14)}`;
 }
 
-async function fetchCsrfToken() {
-  const response = await fetch("/auth/csrf", {
-    credentials: "same-origin",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to refresh CSRF token.");
-  }
-
-  const payload = await response.json();
-  if (!payload?.token) {
-    throw new Error("Missing CSRF token.");
-  }
-
-  return payload.token;
-}
 function ProfileSkeleton() {
   return (
     <div className="flex flex-col items-center gap-2 py-2">

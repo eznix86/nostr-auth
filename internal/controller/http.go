@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	AuthErrorChallengeExpired = "Your login challenge expired. Please start again."
-	AuthErrorInvalidLogin     = "We could not verify your Nostr login. Please try again."
-	AuthErrorInvalidCSRF      = "Your session expired. Please try again."
+	AuthErrorChallengeExpired   = "Your login challenge expired. Please start again."
+	AuthErrorInvalidLogin       = "We could not verify your Nostr login. Please try again."
+	AuthErrorInvalidCSRF        = "Your session expired. Please try again."
+	AuthErrorInvalidRedirect    = "We could not send you back to the requested app."
 )
 
 type redirectAuthorizer interface {

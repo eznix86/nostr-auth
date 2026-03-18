@@ -125,3 +125,24 @@ func TestAuthorizerAllowsRedirectForConfiguredDomain(t *testing.T) {
 		t.Fatal("AllowsRedirect() should reject unknown domain")
 	}
 }
+
+func TestAuthorizerAllowsRedirectForConfiguredDomainWithPort(t *testing.T) {
+	authorizer, err := Compile(FileConfig{
+		Auth: AuthSettings{Enabled: true},
+		Apps: map[string]AppConfig{
+			"default": {
+				Config: AppMatchConfig{Domains: []string{"localhost:3000"}},
+			},
+		},
+	}, zerolog.New(io.Discard))
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	if !authorizer.AllowsRedirect("http://localhost:3000/dashboard") {
+		t.Fatal("AllowsRedirect() should allow configured domain with port")
+	}
+	if authorizer.AllowsRedirect("http://localhost:4000/dashboard") {
+		t.Fatal("AllowsRedirect() should reject unknown domain with different port")
+	}
+}

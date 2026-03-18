@@ -23,7 +23,7 @@ func (a *Authorizer) AllowsRedirect(target string) bool {
 		return false
 	}
 
-	host := parsedTarget.Hostname()
+	host := parsedTarget.Host
 	if host == "" {
 		return false
 	}
