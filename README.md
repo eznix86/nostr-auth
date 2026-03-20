@@ -64,6 +64,16 @@ Should be available on http://localhost:3000
         "users": [
           "group:admins"
         ]
+      },
+      "public": {
+        "config": {
+          "domains": [
+            "demo.example.com"
+          ]
+        },
+        "users": [
+          "*"
+        ]
       }
     }
   },
@@ -81,6 +91,7 @@ Should be available on http://localhost:3000
 - `auth.enabled` turns authorization on or off
 - `auth.groups` defines reusable user groups with `npub`, hex public keys, or nested `group:<name>` references
 - `auth.apps` defines which domains are protected and which users or groups can access them
+- `auth.apps.*.users` accepts `*` to allow any authenticated Nostr user for that app's configured domain
 - `auth.apps.*.config.domain` or `auth.apps.*.config.domains` also define the allowed post-login redirect targets
 - `branding.background.source.type` currently supports `preset`
 - `branding.background.source.variant` can be `canyon-falls` (default), `fields-road`, `mountain-valley`, or `storm-valley`

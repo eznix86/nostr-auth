@@ -16,6 +16,16 @@
         "users": [
           "group:admins"
         ]
+      },
+      "public-demo": {
+        "config": {
+          "domains": [
+            "demo.local"
+          ]
+        },
+        "users": [
+          "*"
+        ]
       }
     }
   },

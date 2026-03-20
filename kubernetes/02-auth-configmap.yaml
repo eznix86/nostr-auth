@@ -28,6 +28,16 @@ data:
             "users": [
               "group:admins"
             ]
+          },
+          "osguild": {
+            "config": {
+              "domains": [
+                "www.osguild.dev"
+              ]
+            },
+            "users": [
+              "*"
+            ]
           }
         }
       },

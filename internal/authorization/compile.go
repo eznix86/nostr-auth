@@ -10,7 +10,8 @@ import (
 )
 
 type principalSet struct {
-	PubKeys map[string]struct{}
+	AllowAny bool
+	PubKeys  map[string]struct{}
 }
 
 type compiler struct {
@@ -54,10 +55,11 @@ func (c *compiler) compileAppPolicy(appName string, appCfg AppConfig, groups map
 	}
 
 	return AppPolicy{
-		Name:    appName,
-		Domains: domains,
-		PubKeys: principals.PubKeys,
-		Groups:  c.compileGroupsForApp(appCfg.Users, groups),
+		Name:     appName,
+		AllowAny: principals.AllowAny,
+		Domains:  domains,
+		PubKeys:  principals.PubKeys,
+		Groups:   c.compileGroupsForApp(appCfg.Users, groups),
 	}, nil
 }
 
@@ -137,6 +139,11 @@ func (c *compiler) addPrincipalEntry(dst *principalSet, entry string, groups map
 		return nil
 	}
 
+	if entry == "*" {
+		dst.AllowAny = true
+		return nil
+	}
+
 	if strings.HasPrefix(entry, groupPrefix) {
 		expanded, err := c.expandGroup(strings.TrimPrefix(entry, groupPrefix), groups, chain)
 		if err != nil {
@@ -183,6 +190,10 @@ func newPrincipalSet() principalSet {
 }
 
 func mergePrincipalSets(dst *principalSet, src principalSet) {
+	if src.AllowAny {
+		dst.AllowAny = true
+	}
+
 	maps.Copy(dst.PubKeys, src.PubKeys)
 }
 

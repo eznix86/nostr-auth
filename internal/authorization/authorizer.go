@@ -33,10 +33,11 @@ func (a *Authorizer) AllowsRedirect(target string) bool {
 }
 
 type AppPolicy struct {
-	Name    string
-	Domains map[string]struct{}
-	PubKeys map[string]struct{}
-	Groups  map[string]principalSet
+	Name     string
+	AllowAny bool
+	Domains  map[string]struct{}
+	PubKeys  map[string]struct{}
+	Groups   map[string]principalSet
 }
 
 func (a *Authorizer) Allowed(host, pubkey string) bool {
@@ -47,6 +48,10 @@ func (a *Authorizer) Allowed(host, pubkey string) bool {
 	app, ok := a.appForHost(host)
 	if !ok {
 		return false
+	}
+
+	if app.AllowAny {
+		return true
 	}
 
 	_, ok = app.PubKeys[strings.ToLower(pubkey)]
@@ -66,6 +71,11 @@ func (a *Authorizer) Groups(host, pubkey string) []string {
 	normalizedPubkey := strings.ToLower(pubkey)
 	matched := make([]string, 0, len(app.Groups))
 	for groupName, principals := range app.Groups {
+		if principals.AllowAny {
+			matched = append(matched, groupName)
+			continue
+		}
+
 		if _, ok := principals.PubKeys[normalizedPubkey]; ok {
 			matched = append(matched, groupName)
 		}

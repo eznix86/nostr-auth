@@ -55,6 +55,29 @@ func TestAuthorizerAllowsPubKeyAndIgnoresNIP05Entries(t *testing.T) {
 	}
 }
 
+func TestAuthorizerAllowsAnyUserForWildcardApp(t *testing.T) {
+	authorizer, err := Compile(FileConfig{
+		Auth: AuthSettings{Enabled: true},
+		Apps: map[string]AppConfig{
+			"default": {
+				Config: AppMatchConfig{Domain: "localhost"},
+				Users:  []string{"*"},
+			},
+		},
+	}, zerolog.New(io.Discard))
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	if !authorizer.Allowed("localhost:8081", "any-pubkey") {
+		t.Fatal("Allowed() should allow any user when wildcard is configured")
+	}
+
+	if authorizer.Allowed("other.local", "any-pubkey") {
+		t.Fatal("Allowed() should still reject unmatched domains when wildcard is configured")
+	}
+}
+
 func TestAuthorizerGroupsReturnsMatchedGroups(t *testing.T) {
 	secretKey := nostrlib.Generate()
 	pubkey := secretKey.Public()
@@ -79,6 +102,29 @@ func TestAuthorizerGroupsReturnsMatchedGroups(t *testing.T) {
 	groups := authorizer.Groups("localhost", pubkey.Hex())
 	if len(groups) != 2 || groups[0] != "admins" || groups[1] != "staff" {
 		t.Fatalf("Groups() = %v, want [admins staff]", groups)
+	}
+}
+
+func TestAuthorizerGroupsReturnsWildcardGroupForAnyUser(t *testing.T) {
+	authorizer, err := Compile(FileConfig{
+		Auth: AuthSettings{Enabled: true},
+		Groups: map[string][]string{
+			"everyone": {"*"},
+		},
+		Apps: map[string]AppConfig{
+			"default": {
+				Config: AppMatchConfig{Domain: "localhost"},
+				Users:  []string{"group:everyone"},
+			},
+		},
+	}, zerolog.New(io.Discard))
+	if err != nil {
+		t.Fatalf("Compile() error = %v", err)
+	}
+
+	groups := authorizer.Groups("localhost", "any-pubkey")
+	if len(groups) != 1 || groups[0] != "everyone" {
+		t.Fatalf("Groups() = %v, want [everyone]", groups)
 	}
 }
 
