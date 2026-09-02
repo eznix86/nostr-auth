@@ -11,7 +11,7 @@ COPY vite.config.js ./
 COPY resources ./resources
 RUN bun run build
 
-FROM golang:1.26.1-alpine AS go-build
+FROM golang:1.27.1-alpine AS go-build
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
 COPY go.mod go.sum ./
