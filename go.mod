@@ -3,7 +3,7 @@ module github.com/eznix86/nostr-auth
 go 1.26.1
 
 require (
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/joho/godotenv v1.5.1
 )
 
